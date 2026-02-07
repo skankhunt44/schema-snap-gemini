@@ -25,9 +25,9 @@ const buildNodes = (tables: TableSchema[]): Node[] => {
       style: {
         padding: 8,
         borderRadius: 10,
-        border: '1px solid #333',
-        background: '#0b1220',
-        color: '#fff',
+        border: '1px solid #e2e8f0',
+        background: '#ffffff',
+        color: '#0f172a',
         minWidth: 180
       }
     };
@@ -42,8 +42,8 @@ const buildEdges = (rels: Relationship[]): Edge[] => {
     label: `${r.from.column} → ${r.to.column} (${Math.round(r.confidence * 100)}%)`,
     animated: r.suggestedBy === 'gemini',
     data: { relationship: r },
-    style: { stroke: r.suggestedBy === 'gemini' ? '#7c3aed' : '#38bdf8' },
-    labelStyle: { fill: '#e2e8f0', fontSize: 10 }
+    style: { stroke: r.suggestedBy === 'gemini' ? '#7c3aed' : '#0ea5e9' },
+    labelStyle: { fill: '#334155', fontSize: 10 }
   }));
 };
 
@@ -60,7 +60,7 @@ export default function GraphView({
   const edges = React.useMemo(() => buildEdges(relationships), [relationships]);
 
   return (
-    <div style={{ height: 520, border: '1px solid #1f2937', borderRadius: 12 }}>
+    <div style={{ height: 520, border: '1px solid #e2e8f0', borderRadius: 12 }}>
       <ReactFlow
         nodes={nodes}
         edges={edges}
@@ -70,7 +70,7 @@ export default function GraphView({
           if (rel) onEdgeSelect?.(rel);
         }}
       >
-        <Background color="#1f2937" gap={16} />
+        <Background color="#e2e8f0" gap={16} />
         <Controls />
       </ReactFlow>
     </div>

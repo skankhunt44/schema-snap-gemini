@@ -1,7 +1,13 @@
 import React from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { ingestCsv, ingestDDL, ingestDB, ingestSQLite } from './lib/api';
 import { Relationship, SchemaSnapshot, TemplateField } from './types';
-import GraphView from './components/GraphView';
+import Sidebar from './components/Sidebar';
+import Dashboard from './pages/Dashboard';
+import DataSources from './pages/DataSources';
+import Templates from './pages/Templates';
+import Relationships from './pages/Relationships';
+import Settings from './pages/Settings';
 
 export default function App() {
   const [snapshot, setSnapshot] = React.useState<SchemaSnapshot | null>(null);
@@ -192,210 +198,100 @@ export default function App() {
     }
   };
 
+  const mappedCount = Object.values(mappingSelections).filter(Boolean).length;
+
   return (
-    <div className="app">
-      <header>
-        <h1>Schema Snap (Gemini)</h1>
-        <p>Infer relationships across messy schemas and get explainable mapping suggestions.</p>
-      </header>
-
-      <section className="panel">
-        <h2>1) Ingest data</h2>
-        <div className="grid">
-          <div className="card">
-            <h3>CSV Upload</h3>
-            <input
-              type="file"
-              accept=".csv"
-              multiple
-              onChange={(e) => {
-                const files = Array.from(e.target.files || []);
-                if (!files.length) return;
-                run(() => ingestCsv(files));
-              }}
+    <Router>
+      <div className="flex min-h-screen bg-slate-50">
+        <Sidebar />
+        <main className="flex-1 md:ml-64 transition-all duration-300">
+          <Routes>
+            <Route
+              path="/"
+              element={<Dashboard snapshot={snapshot} templateFields={templateFields} mappedCount={mappedCount} />}
             />
-          </div>
-
-          <div className="card">
-            <h3>SQL DDL</h3>
-            <select value={dialect} onChange={(e) => setDialect(e.target.value)}>
-              <option value="postgresql">Postgres</option>
-              <option value="mysql">MySQL</option>
-              <option value="sqlite">SQLite</option>
-            </select>
-            <textarea
-              placeholder="Paste CREATE TABLE statements..."
-              value={ddl}
-              onChange={(e) => setDdl(e.target.value)}
+            <Route
+              path="/connect"
+              element={
+                <DataSources
+                  ddl={ddl}
+                  dialect={dialect}
+                  dbType={dbType}
+                  connectionString={connectionString}
+                  loading={loading}
+                  error={error}
+                  onDdlChange={setDdl}
+                  onDialectChange={setDialect}
+                  onDbTypeChange={setDbType}
+                  onConnectionChange={setConnectionString}
+                  onCsvUpload={(files) => run(() => ingestCsv(files))}
+                  onDDLAnalyze={() => run(() => ingestDDL(ddl, dialect))}
+                  onDbAnalyze={() => run(() => ingestDB(dbType, connectionString))}
+                  onSQLiteUpload={(file) => run(() => ingestSQLite(file))}
+                />
+              }
             />
-            <button onClick={() => run(() => ingestDDL(ddl, dialect))} disabled={!ddl || loading}>
-              Analyze DDL
-            </button>
-          </div>
-
-          <div className="card">
-            <h3>DB Connection</h3>
-            <select value={dbType} onChange={(e) => setDbType(e.target.value)}>
-              <option value="postgres">Postgres</option>
-              <option value="supabase">Supabase (Postgres)</option>
-              <option value="mysql">MySQL</option>
-            </select>
-            <input
-              type="text"
-              placeholder="Connection string"
-              value={connectionString}
-              onChange={(e) => setConnectionString(e.target.value)}
+            <Route
+              path="/templates"
+              element={
+                <Templates
+                  templateText={templateText}
+                  templateFields={templateFields}
+                  sourceFields={sourceFields}
+                  mappingSelections={mappingSelections}
+                  suggestionMap={suggestionMap}
+                  onTemplateChange={setTemplateText}
+                  onMappingChange={(fieldId, sourceId) =>
+                    setMappingSelections(prev => ({
+                      ...prev,
+                      [fieldId]: sourceId
+                    }))
+                  }
+                  onExport={exportTemplateMappings}
+                  onLoadSample={loadSampleTemplate}
+                />
+              }
             />
-            <button onClick={() => run(() => ingestDB(dbType, connectionString))} disabled={!connectionString || loading}>
-              Analyze DB
-            </button>
-          </div>
-
-          <div className="card">
-            <h3>SQLite File</h3>
-            <input
-              type="file"
-              accept=".db,.sqlite"
-              onChange={(e) => {
-                const file = e.target.files?.[0];
-                if (!file) return;
-                run(() => ingestSQLite(file));
-              }}
+            <Route
+              path="/map"
+              element={
+                <Templates
+                  templateText={templateText}
+                  templateFields={templateFields}
+                  sourceFields={sourceFields}
+                  mappingSelections={mappingSelections}
+                  suggestionMap={suggestionMap}
+                  onTemplateChange={setTemplateText}
+                  onMappingChange={(fieldId, sourceId) =>
+                    setMappingSelections(prev => ({
+                      ...prev,
+                      [fieldId]: sourceId
+                    }))
+                  }
+                  onExport={exportTemplateMappings}
+                  onLoadSample={loadSampleTemplate}
+                />
+              }
             />
-          </div>
-        </div>
-
-        {loading && <p className="muted">Analyzing…</p>}
-        {error && <p className="error">{error}</p>}
-      </section>
-
-      {snapshot && (
-        <section className="panel">
-          <h2>2) Relationship Graph</h2>
-          <GraphView
-            tables={snapshot.tables}
-            relationships={snapshot.relationships}
-            onEdgeSelect={setSelectedRel}
-          />
-
-          <div className="card" style={{ marginTop: 16 }}>
-            <h3>Selected relationship</h3>
-            {selectedRel ? (
-              <div>
-                <p>
-                  <strong>{selectedRel.from.table}.{selectedRel.from.column}</strong>
-                  {' → '}
-                  <strong>{selectedRel.to.table}.{selectedRel.to.column}</strong>
-                </p>
-                <p className="muted">Type: {selectedRel.type} • Confidence: {Math.round(selectedRel.confidence * 100)}% • {selectedRel.suggestedBy}</p>
-                <p>{selectedRel.rationale}</p>
-                {selectedRel.evidence && (
-                  <ul>
-                    {selectedRel.evidence.nameScore !== undefined && (
-                      <li>Name similarity: {selectedRel.evidence.nameScore}</li>
-                    )}
-                    {selectedRel.evidence.typeScore !== undefined && (
-                      <li>Type match: {selectedRel.evidence.typeScore}</li>
-                    )}
-                    {selectedRel.evidence.uniquenessScore !== undefined && (
-                      <li>Uniqueness: {selectedRel.evidence.uniquenessScore}</li>
-                    )}
-                    {selectedRel.evidence.overlapScore !== undefined && (
-                      <li>Value overlap: {selectedRel.evidence.overlapScore}</li>
-                    )}
-                  </ul>
-                )}
-              </div>
-            ) : (
-              <p className="muted">Click an edge in the graph to view details.</p>
-            )}
-          </div>
-        </section>
-      )}
-
-      {snapshot && (
-        <section className="panel">
-          <h2>3) Template Mapping</h2>
-          <div className="card" style={{ marginBottom: 16 }}>
-            <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))' }}>
-              <button onClick={loadSampleTemplate}>Load sample template</button>
-              <button onClick={exportTemplateMappings} disabled={!templateFields.length}>
-                Export Mapping JSON
-              </button>
-            </div>
-            <textarea
-              placeholder="One field per line. Optional: name | description"
-              value={templateText}
-              onChange={(e) => setTemplateText(e.target.value)}
+            <Route
+              path="/relationships"
+              element={
+                <Relationships
+                  snapshot={snapshot}
+                  selectedRel={selectedRel}
+                  onSelectRel={setSelectedRel}
+                  onExportJson={() =>
+                    snapshot && downloadTextFile('schema-snap.json', JSON.stringify(snapshot, null, 2))
+                  }
+                  onExportSql={() => snapshot && downloadTextFile('join-plan.sql', buildJoinPlan(snapshot))}
+                />
+              }
             />
-          </div>
-
-          {templateFields.length > 0 && (
-            <div className="grid">
-              {templateFields.map(field => (
-                <div className="card" key={field.id}>
-                  <h3>{field.name}</h3>
-                  {field.description && <p className="muted">{field.description}</p>}
-                  <label className="muted">Mapped source</label>
-                  <select
-                    value={mappingSelections[field.id] ?? ''}
-                    onChange={(e) =>
-                      setMappingSelections(prev => ({
-                        ...prev,
-                        [field.id]: e.target.value || null
-                      }))
-                    }
-                  >
-                    <option value="">— Not mapped —</option>
-                    {sourceFields.map(source => (
-                      <option key={source.id} value={source.id}>
-                        {source.table}.{source.column} ({source.dataType})
-                      </option>
-                    ))}
-                  </select>
-                  <p className="muted" style={{ marginTop: 8 }}>
-                    Suggested: {suggestionMap[field.id]?.sourceId ?? '—'} • Confidence {suggestionMap[field.id]?.confidence ?? 0}
-                  </p>
-                </div>
-              ))}
-            </div>
-          )}
-        </section>
-      )}
-
-      {snapshot && (
-        <section className="panel">
-          <h2>4) Details</h2>
-          <div className="grid" style={{ marginBottom: 16 }}>
-            <button
-              onClick={() => downloadTextFile('schema-snap.json', JSON.stringify(snapshot, null, 2))}
-            >
-              Export JSON
-            </button>
-            <button onClick={() => downloadTextFile('join-plan.sql', buildJoinPlan(snapshot))}>
-              Export SQL Join Plan
-            </button>
-          </div>
-          <div className="grid">
-            {snapshot.tables.map((t) => (
-              <div className="card" key={t.name}>
-                <h3>{t.name}</h3>
-                <ul>
-                  {t.columns.map((c) => (
-                    <li key={c.name}>
-                      <strong>{c.name}</strong> <span className="muted">({c.dataType})</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
-
-      <footer>
-        <p className="muted">Gemini suggestions are labeled in purple; heuristic links are blue.</p>
-      </footer>
-    </div>
+            <Route path="/settings" element={<Settings />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </main>
+      </div>
+    </Router>
   );
 }
