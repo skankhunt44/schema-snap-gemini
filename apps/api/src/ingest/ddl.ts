@@ -1,5 +1,7 @@
-import { Parser } from 'node-sql-parser';
+import pkg from 'node-sql-parser';
 import { TableSchema, DataType } from '../types/schema';
+
+const { Parser } = pkg as any;
 
 const mapSqlType = (type?: string): DataType => {
   if (!type) return 'unknown';
