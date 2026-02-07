@@ -1,6 +1,6 @@
 import React from 'react';
 import { ingestCsv, ingestDDL, ingestDB, ingestSQLite } from './lib/api';
-import { Relationship, SchemaSnapshot } from './types';
+import { Relationship, SchemaSnapshot, TemplateField } from './types';
 import GraphView from './components/GraphView';
 
 export default function App() {
@@ -13,6 +13,8 @@ export default function App() {
   const [dbType, setDbType] = React.useState('postgres');
   const [connectionString, setConnectionString] = React.useState('');
   const [selectedRel, setSelectedRel] = React.useState<Relationship | null>(null);
+  const [templateText, setTemplateText] = React.useState('');
+  const [mappingSelections, setMappingSelections] = React.useState<Record<string, string | null>>({});
 
   const downloadTextFile = (filename: string, content: string) => {
     const blob = new Blob([content], { type: 'text/plain' });
@@ -22,6 +24,32 @@ export default function App() {
     link.download = filename;
     link.click();
     URL.revokeObjectURL(url);
+  };
+
+  const normalize = (value: string) => value.toLowerCase().replace(/[^a-z0-9]/g, '');
+
+  const levenshtein = (a: string, b: string) => {
+    const m = a.length;
+    const n = b.length;
+    const dp = Array.from({ length: m + 1 }, () => Array(n + 1).fill(0));
+    for (let i = 0; i <= m; i++) dp[i][0] = i;
+    for (let j = 0; j <= n; j++) dp[0][j] = j;
+    for (let i = 1; i <= m; i++) {
+      for (let j = 1; j <= n; j++) {
+        const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+        dp[i][j] = Math.min(dp[i - 1][j] + 1, dp[i][j - 1] + 1, dp[i - 1][j - 1] + cost);
+      }
+    }
+    return dp[m][n];
+  };
+
+  const nameSimilarity = (a: string, b: string) => {
+    const na = normalize(a);
+    const nb = normalize(b);
+    if (!na || !nb) return 0;
+    const dist = levenshtein(na, nb);
+    const maxLen = Math.max(na.length, nb.length) || 1;
+    return 1 - dist / maxLen;
   };
 
   const buildJoinPlan = (snapshot: SchemaSnapshot) => {
@@ -56,6 +84,98 @@ export default function App() {
     }
 
     return sql + ';';
+  };
+
+  const parseTemplateFields = (text: string): TemplateField[] => {
+    return text
+      .split('\n')
+      .map(line => line.trim())
+      .filter(Boolean)
+      .map((line, idx) => {
+        const [name, description] = line.split('|').map(part => part.trim());
+        return {
+          id: `${idx}-${name}`,
+          name,
+          description
+        };
+      });
+  };
+
+  const templateFields = React.useMemo(() => parseTemplateFields(templateText), [templateText]);
+  const sourceFields = React.useMemo(() => {
+    if (!snapshot) return [];
+    return snapshot.tables.flatMap(table =>
+      table.columns.map(col => ({
+        id: `${table.name}.${col.name}`,
+        table: table.name,
+        column: col.name,
+        dataType: col.dataType
+      }))
+    );
+  }, [snapshot]);
+
+  const suggestionMap = React.useMemo(() => {
+    const map: Record<string, { sourceId: string | null; confidence: number; rationale: string }> = {};
+    if (!snapshot) return map;
+
+    templateFields.forEach(field => {
+      let best: { sourceId: string | null; score: number } = { sourceId: null, score: 0 };
+      sourceFields.forEach(source => {
+        const score = nameSimilarity(field.name, source.column);
+        if (score > best.score) best = { sourceId: source.id, score };
+      });
+
+      map[field.id] = {
+        sourceId: best.score >= 0.35 ? best.sourceId : null,
+        confidence: Number(best.score.toFixed(2)),
+        rationale: best.sourceId ? `Name similarity ${best.score.toFixed(2)}` : 'No strong match'
+      };
+    });
+
+    return map;
+  }, [templateFields, sourceFields, snapshot]);
+
+  React.useEffect(() => {
+    if (!templateFields.length) {
+      setMappingSelections({});
+      return;
+    }
+
+    setMappingSelections(prev => {
+      const next: Record<string, string | null> = {};
+      templateFields.forEach(field => {
+        next[field.id] = prev[field.id] ?? suggestionMap[field.id]?.sourceId ?? null;
+      });
+      return next;
+    });
+  }, [templateFields, suggestionMap]);
+
+  const exportTemplateMappings = () => {
+    if (!snapshot) return;
+    const payload = {
+      generatedAt: new Date().toISOString(),
+      templateFields: templateFields.map(field => ({
+        name: field.name,
+        description: field.description,
+        sourceField: mappingSelections[field.id],
+        confidence: suggestionMap[field.id]?.confidence ?? null,
+        rationale: suggestionMap[field.id]?.rationale ?? null
+      }))
+    };
+    downloadTextFile('template-mapping.json', JSON.stringify(payload, null, 2));
+  };
+
+  const loadSampleTemplate = () => {
+    setTemplateText(
+      [
+        'Donor Name',
+        'Donor Email',
+        'Total Donations',
+        'Donation Date',
+        'Donation Amount',
+        'Program Name'
+      ].join('\n')
+    );
   };
 
   const run = async (fn: () => Promise<SchemaSnapshot>) => {
@@ -195,7 +315,57 @@ export default function App() {
 
       {snapshot && (
         <section className="panel">
-          <h2>3) Details</h2>
+          <h2>3) Template Mapping</h2>
+          <div className="card" style={{ marginBottom: 16 }}>
+            <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))' }}>
+              <button onClick={loadSampleTemplate}>Load sample template</button>
+              <button onClick={exportTemplateMappings} disabled={!templateFields.length}>
+                Export Mapping JSON
+              </button>
+            </div>
+            <textarea
+              placeholder="One field per line. Optional: name | description"
+              value={templateText}
+              onChange={(e) => setTemplateText(e.target.value)}
+            />
+          </div>
+
+          {templateFields.length > 0 && (
+            <div className="grid">
+              {templateFields.map(field => (
+                <div className="card" key={field.id}>
+                  <h3>{field.name}</h3>
+                  {field.description && <p className="muted">{field.description}</p>}
+                  <label className="muted">Mapped source</label>
+                  <select
+                    value={mappingSelections[field.id] ?? ''}
+                    onChange={(e) =>
+                      setMappingSelections(prev => ({
+                        ...prev,
+                        [field.id]: e.target.value || null
+                      }))
+                    }
+                  >
+                    <option value="">— Not mapped —</option>
+                    {sourceFields.map(source => (
+                      <option key={source.id} value={source.id}>
+                        {source.table}.{source.column} ({source.dataType})
+                      </option>
+                    ))}
+                  </select>
+                  <p className="muted" style={{ marginTop: 8 }}>
+                    Suggested: {suggestionMap[field.id]?.sourceId ?? '—'} • Confidence {suggestionMap[field.id]?.confidence ?? 0}
+                  </p>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+      )}
+
+      {snapshot && (
+        <section className="panel">
+          <h2>4) Details</h2>
           <div className="grid" style={{ marginBottom: 16 }}>
             <button
               onClick={() => downloadTextFile('schema-snap.json', JSON.stringify(snapshot, null, 2))}

@@ -33,3 +33,9 @@ export type SchemaSnapshot = {
   relationships: Relationship[];
   warnings?: string[];
 };
+
+export type TemplateField = {
+  id: string;
+  name: string;
+  description?: string;
+};
