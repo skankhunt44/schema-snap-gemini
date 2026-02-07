@@ -6,6 +6,7 @@ import Sidebar from './components/Sidebar';
 import Dashboard from './pages/Dashboard';
 import DataSources from './pages/DataSources';
 import Templates from './pages/Templates';
+import SmartMapper from './pages/SmartMapper';
 import Relationships from './pages/Relationships';
 import Settings from './pages/Settings';
 
@@ -200,6 +201,16 @@ export default function App() {
 
   const mappedCount = Object.values(mappingSelections).filter(Boolean).length;
 
+  const applySuggestions = () => {
+    setMappingSelections(prev => {
+      const next: Record<string, string | null> = { ...prev };
+      templateFields.forEach(field => {
+        next[field.id] = suggestionMap[field.id]?.sourceId ?? null;
+      });
+      return next;
+    });
+  };
+
   return (
     <Router>
       <div className="flex min-h-screen bg-slate-50">
@@ -255,21 +266,18 @@ export default function App() {
             <Route
               path="/map"
               element={
-                <Templates
-                  templateText={templateText}
+                <SmartMapper
                   templateFields={templateFields}
                   sourceFields={sourceFields}
                   mappingSelections={mappingSelections}
                   suggestionMap={suggestionMap}
-                  onTemplateChange={setTemplateText}
                   onMappingChange={(fieldId, sourceId) =>
                     setMappingSelections(prev => ({
                       ...prev,
                       [fieldId]: sourceId
                     }))
                   }
-                  onExport={exportTemplateMappings}
-                  onLoadSample={loadSampleTemplate}
+                  onApplySuggestions={applySuggestions}
                 />
               }
             />
