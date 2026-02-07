@@ -20,6 +20,12 @@ export type Relationship = {
   confidence: number;
   rationale: string;
   suggestedBy: 'heuristic' | 'gemini';
+  evidence?: {
+    nameScore?: number;
+    typeScore?: number;
+    uniquenessScore?: number;
+    overlapScore?: number;
+  };
 };
 
 export type SchemaSnapshot = {

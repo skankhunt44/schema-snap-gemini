@@ -41,18 +41,35 @@ const buildEdges = (rels: Relationship[]): Edge[] => {
     target: r.to.table,
     label: `${r.from.column} → ${r.to.column} (${Math.round(r.confidence * 100)}%)`,
     animated: r.suggestedBy === 'gemini',
+    data: { relationship: r },
     style: { stroke: r.suggestedBy === 'gemini' ? '#7c3aed' : '#38bdf8' },
     labelStyle: { fill: '#e2e8f0', fontSize: 10 }
   }));
 };
 
-export default function GraphView({ tables, relationships }: { tables: TableSchema[]; relationships: Relationship[] }) {
+export default function GraphView({
+  tables,
+  relationships,
+  onEdgeSelect
+}: {
+  tables: TableSchema[];
+  relationships: Relationship[];
+  onEdgeSelect?: (relationship: Relationship) => void;
+}) {
   const nodes = React.useMemo(() => buildNodes(tables), [tables]);
   const edges = React.useMemo(() => buildEdges(relationships), [relationships]);
 
   return (
     <div style={{ height: 520, border: '1px solid #1f2937', borderRadius: 12 }}>
-      <ReactFlow nodes={nodes} edges={edges} fitView>
+      <ReactFlow
+        nodes={nodes}
+        edges={edges}
+        fitView
+        onEdgeClick={(_, edge) => {
+          const rel = (edge.data as any)?.relationship as Relationship | undefined;
+          if (rel) onEdgeSelect?.(rel);
+        }}
+      >
         <Background color="#1f2937" gap={16} />
         <Controls />
       </ReactFlow>
