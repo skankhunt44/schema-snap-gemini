@@ -1,0 +1,96 @@
+:root {
+  color-scheme: dark;
+  font-family: Inter, system-ui, Arial, sans-serif;
+  background: #0a0f1c;
+  color: #e2e8f0;
+}
+
+body {
+  margin: 0;
+  background: #0a0f1c;
+}
+
+.app {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 24px;
+}
+
+header h1 {
+  margin: 0 0 6px;
+}
+
+header p {
+  color: #94a3b8;
+  margin: 0 0 18px;
+}
+
+.panel {
+  background: #0b1220;
+  border: 1px solid #1f2937;
+  border-radius: 12px;
+  padding: 18px;
+  margin-bottom: 20px;
+}
+
+.grid {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+}
+
+.card {
+  background: #0f172a;
+  border: 1px solid #1f2937;
+  border-radius: 12px;
+  padding: 14px;
+}
+
+textarea {
+  width: 100%;
+  min-height: 120px;
+  margin: 8px 0;
+  background: #0b1220;
+  color: #e2e8f0;
+  border: 1px solid #1f2937;
+  border-radius: 8px;
+  padding: 8px;
+}
+
+input, select, button {
+  width: 100%;
+  margin-top: 8px;
+  padding: 8px;
+  border-radius: 8px;
+  border: 1px solid #1f2937;
+  background: #0b1220;
+  color: #e2e8f0;
+}
+
+button {
+  cursor: pointer;
+  background: #2563eb;
+  border: none;
+}
+
+button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.muted {
+  color: #94a3b8;
+}
+
+.error {
+  color: #f87171;
+}
+
+ul {
+  padding-left: 18px;
+}
+
+footer {
+  text-align: center;
+  margin-top: 16px;
+}
