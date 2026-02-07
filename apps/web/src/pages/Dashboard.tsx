@@ -1,7 +1,7 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { Database, Share2, Wand2, FileText } from 'lucide-react';
-import { SchemaSnapshot, TemplateField } from '../types';
+import { DataSource, SchemaSnapshot, Template } from '../types';
 
 const StatCard: React.FC<{ title: string; value: string | number; sub: string; icon: React.ReactNode; color: string }> = ({
   title,
@@ -24,12 +24,15 @@ const StatCard: React.FC<{ title: string; value: string | number; sub: string; i
 
 const Dashboard: React.FC<{
   snapshot: SchemaSnapshot | null;
-  templateFields: TemplateField[];
+  templates: Template[];
+  dataSources: DataSource[];
   mappedCount: number;
-}> = ({ snapshot, templateFields, mappedCount }) => {
+  totalMapped: number;
+}> = ({ snapshot, templates, dataSources, mappedCount, totalMapped }) => {
   const tableCount = snapshot?.tables.length ?? 0;
   const columnCount = snapshot?.tables.reduce((acc, t) => acc + t.columns.length, 0) ?? 0;
   const relationships = snapshot?.relationships.length ?? 0;
+  const totalFields = templates.reduce((acc, t) => acc + t.fields.length, 0);
 
   return (
     <div className="p-6">
@@ -47,13 +50,6 @@ const Dashboard: React.FC<{
           color="bg-indigo-600"
         />
         <StatCard
-          title="Columns"
-          value={columnCount}
-          sub="Profiled fields"
-          icon={<FileText className="text-emerald-600" />}
-          color="bg-emerald-600"
-        />
-        <StatCard
           title="Relationships"
           value={relationships}
           sub="Inferred edges"
@@ -61,9 +57,16 @@ const Dashboard: React.FC<{
           color="bg-sky-600"
         />
         <StatCard
-          title="Template Mapped"
-          value={`${mappedCount}/${templateFields.length || 0}`}
-          sub="Fields matched"
+          title="Templates"
+          value={templates.length}
+          sub={`${dataSources.length} data sources connected`}
+          icon={<FileText className="text-emerald-600" />}
+          color="bg-emerald-600"
+        />
+        <StatCard
+          title="Fields Mapped"
+          value={`${totalMapped}/${totalFields || 0}`}
+          sub="Across all templates"
           icon={<Wand2 className="text-violet-600" />}
           color="bg-violet-600"
         />

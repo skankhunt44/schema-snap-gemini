@@ -1,10 +1,13 @@
 import React from 'react';
 import { Wand2, RefreshCw, CheckCircle2 } from 'lucide-react';
-import { TemplateField } from '../types';
+import { Template, TemplateField } from '../types';
 
 type SourceField = { id: string; table: string; column: string; dataType: string };
 
 type Props = {
+  templates: Template[];
+  activeTemplateId: string | null;
+  onSelectTemplate: (id: string | null) => void;
   templateFields: TemplateField[];
   sourceFields: SourceField[];
   mappingSelections: Record<string, string | null>;
@@ -14,6 +17,9 @@ type Props = {
 };
 
 const SmartMapper: React.FC<Props> = ({
+  templates,
+  activeTemplateId,
+  onSelectTemplate,
   templateFields,
   sourceFields,
   mappingSelections,
@@ -30,13 +36,25 @@ const SmartMapper: React.FC<Props> = ({
           </h1>
           <p className="text-slate-500">Map stakeholder fields to your schema with AI suggestions.</p>
         </div>
-        <button
-          onClick={onApplySuggestions}
-          className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg shadow-sm"
-          disabled={!templateFields.length}
-        >
-          <RefreshCw size={18} /> Apply AI Suggestions
-        </button>
+        <div className="flex flex-col sm:flex-row gap-3">
+          <select
+            value={activeTemplateId ?? ''}
+            onChange={(e) => onSelectTemplate(e.target.value || null)}
+            className="px-4 py-2 border border-slate-300 rounded-lg text-sm bg-white text-slate-900"
+          >
+            <option value="">Select template</option>
+            {templates.map(t => (
+              <option key={t.id} value={t.id}>{t.name}</option>
+            ))}
+          </select>
+          <button
+            onClick={onApplySuggestions}
+            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg shadow-sm"
+            disabled={!templateFields.length}
+          >
+            <RefreshCw size={18} /> Apply AI Suggestions
+          </button>
+        </div>
       </div>
 
       {templateFields.length === 0 ? (

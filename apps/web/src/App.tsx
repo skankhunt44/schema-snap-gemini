@@ -1,27 +1,29 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { ingestCsv, ingestDDL, ingestDB, ingestSQLite } from './lib/api';
-import { Relationship, SchemaSnapshot, TemplateField } from './types';
+import { DataSource, Relationship, SchemaSnapshot, Template, TemplateField } from './types';
 import Sidebar from './components/Sidebar';
 import Dashboard from './pages/Dashboard';
 import DataSources from './pages/DataSources';
 import Templates from './pages/Templates';
 import SmartMapper from './pages/SmartMapper';
 import Relationships from './pages/Relationships';
+import Analytics from './pages/Analytics';
 import Settings from './pages/Settings';
 
 export default function App() {
   const [snapshot, setSnapshot] = React.useState<SchemaSnapshot | null>(null);
+  const [dataSources, setDataSources] = React.useState<DataSource[]>([]);
+  const [templates, setTemplates] = React.useState<Template[]>([]);
+  const [activeTemplateId, setActiveTemplateId] = React.useState<string | null>(null);
+  const [mappingByTemplate, setMappingByTemplate] = React.useState<Record<string, Record<string, string | null>>>({});
+
   const [error, setError] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(false);
-
-  const [ddl, setDdl] = React.useState('');
-  const [dialect, setDialect] = React.useState('postgresql');
-  const [dbType, setDbType] = React.useState('postgres');
-  const [connectionString, setConnectionString] = React.useState('');
   const [selectedRel, setSelectedRel] = React.useState<Relationship | null>(null);
-  const [templateText, setTemplateText] = React.useState('');
-  const [mappingSelections, setMappingSelections] = React.useState<Record<string, string | null>>({});
+
+  const activeTemplate = templates.find(t => t.id === activeTemplateId) || null;
+  const templateFields = activeTemplate?.fields ?? [];
 
   const downloadTextFile = (filename: string, content: string) => {
     const blob = new Blob([content], { type: 'text/plain' });
@@ -59,13 +61,13 @@ export default function App() {
     return 1 - dist / maxLen;
   };
 
-  const buildJoinPlan = (snapshot: SchemaSnapshot) => {
-    if (!snapshot.tables.length) return '-- No tables detected';
-    const rels = [...snapshot.relationships].sort((a, b) => b.confidence - a.confidence);
+  const buildJoinPlan = (data: SchemaSnapshot) => {
+    if (!data.tables.length) return '-- No tables detected';
+    const rels = [...data.relationships].sort((a, b) => b.confidence - a.confidence);
     const used = new Set<string>();
 
     if (!rels.length) {
-      return `SELECT *\nFROM ${snapshot.tables[0].name};`;
+      return `SELECT *\nFROM ${data.tables[0].name};`;
     }
 
     const first = rels[0];
@@ -85,7 +87,7 @@ export default function App() {
       }
     }
 
-    const unlinked = snapshot.tables.map(t => t.name).filter(t => !used.has(t));
+    const unlinked = data.tables.map(t => t.name).filter(t => !used.has(t));
     if (unlinked.length) {
       sql += `\n\n-- Unlinked tables: ${unlinked.join(', ')}`;
     }
@@ -93,22 +95,6 @@ export default function App() {
     return sql + ';';
   };
 
-  const parseTemplateFields = (text: string): TemplateField[] => {
-    return text
-      .split('\n')
-      .map(line => line.trim())
-      .filter(Boolean)
-      .map((line, idx) => {
-        const [name, description] = line.split('|').map(part => part.trim());
-        return {
-          id: `${idx}-${name}`,
-          name,
-          description
-        };
-      });
-  };
-
-  const templateFields = React.useMemo(() => parseTemplateFields(templateText), [templateText]);
   const sourceFields = React.useMemo(() => {
     if (!snapshot) return [];
     return snapshot.tables.flatMap(table =>
@@ -123,7 +109,7 @@ export default function App() {
 
   const suggestionMap = React.useMemo(() => {
     const map: Record<string, { sourceId: string | null; confidence: number; rationale: string }> = {};
-    if (!snapshot) return map;
+    if (!snapshot || !templateFields.length) return map;
 
     templateFields.forEach(field => {
       let best: { sourceId: string | null; score: number } = { sourceId: null, score: 0 };
@@ -142,25 +128,42 @@ export default function App() {
     return map;
   }, [templateFields, sourceFields, snapshot]);
 
-  React.useEffect(() => {
-    if (!templateFields.length) {
-      setMappingSelections({});
-      return;
-    }
+  const mappingSelections = activeTemplateId ? mappingByTemplate[activeTemplateId] || {} : {};
 
-    setMappingSelections(prev => {
-      const next: Record<string, string | null> = {};
+  React.useEffect(() => {
+    if (!activeTemplateId) return;
+    setMappingByTemplate(prev => {
+      const current = prev[activeTemplateId] || {};
+      const next: Record<string, string | null> = { ...current };
       templateFields.forEach(field => {
-        next[field.id] = prev[field.id] ?? suggestionMap[field.id]?.sourceId ?? null;
+        if (next[field.id] === undefined) {
+          next[field.id] = suggestionMap[field.id]?.sourceId ?? null;
+        }
       });
-      return next;
+      return { ...prev, [activeTemplateId]: next };
     });
-  }, [templateFields, suggestionMap]);
+  }, [activeTemplateId, templateFields, suggestionMap]);
+
+  const applySuggestions = () => {
+    if (!activeTemplateId) return;
+    setMappingByTemplate(prev => {
+      const next: Record<string, string | null> = { ...prev[activeTemplateId] };
+      templateFields.forEach(field => {
+        next[field.id] = suggestionMap[field.id]?.sourceId ?? null;
+      });
+      return { ...prev, [activeTemplateId]: next };
+    });
+  };
 
   const exportTemplateMappings = () => {
-    if (!snapshot) return;
+    if (!snapshot || !activeTemplate) return;
     const payload = {
       generatedAt: new Date().toISOString(),
+      template: {
+        id: activeTemplate.id,
+        name: activeTemplate.name,
+        stakeholder: activeTemplate.stakeholder
+      },
       templateFields: templateFields.map(field => ({
         name: field.name,
         description: field.description,
@@ -172,44 +175,73 @@ export default function App() {
     downloadTextFile('template-mapping.json', JSON.stringify(payload, null, 2));
   };
 
-  const loadSampleTemplate = () => {
-    setTemplateText(
-      [
-        'Donor Name',
-        'Donor Email',
-        'Total Donations',
-        'Donation Date',
-        'Donation Amount',
-        'Program Name'
-      ].join('\n')
-    );
+  const addTemplate = (template: Template) => {
+    setTemplates(prev => {
+      const next = [...prev, template];
+      if (!activeTemplateId) setActiveTemplateId(template.id);
+      return next;
+    });
   };
 
-  const run = async (fn: () => Promise<SchemaSnapshot>) => {
+  const updateTemplate = (templateId: string, update: Partial<Template>) => {
+    setTemplates(prev => prev.map(t => (t.id === templateId ? { ...t, ...update } : t)));
+  };
+
+  const removeTemplate = (templateId: string) => {
+    setTemplates(prev => {
+      const next = prev.filter(t => t.id !== templateId);
+      if (activeTemplateId === templateId) setActiveTemplateId(next[0]?.id ?? null);
+      return next;
+    });
+    setMappingByTemplate(prev => {
+      const copy = { ...prev };
+      delete copy[templateId];
+      return copy;
+    });
+  };
+
+  const mappedCountForTemplate = (templateId: string) => {
+    const mapping = mappingByTemplate[templateId] || {};
+    return Object.values(mapping).filter(Boolean).length;
+  };
+
+  const buildDataSourceEntry = (name: string, type: string, data: SchemaSnapshot): DataSource => {
+    const tableCount = data.tables.length;
+    const columnCount = data.tables.reduce((acc, t) => acc + t.columns.length, 0);
+    return {
+      id: `${type}-${Date.now()}`,
+      name,
+      type,
+      status: 'connected',
+      tableCount,
+      columnCount,
+      lastSync: new Date().toLocaleString()
+    };
+  };
+
+  const handleIngest = async (type: string, name: string, action: () => Promise<SchemaSnapshot>) => {
     try {
       setError(null);
       setLoading(true);
-      const data = await fn();
+      const data = await action();
       setSnapshot(data);
       setSelectedRel(null);
+      setDataSources(prev => [buildDataSourceEntry(name, type, data), ...prev]);
+      return true;
     } catch (e: any) {
       setError(e.message || 'Request failed');
+      return false;
     } finally {
       setLoading(false);
     }
   };
 
-  const mappedCount = Object.values(mappingSelections).filter(Boolean).length;
+  const mappedCount = activeTemplateId ? mappedCountForTemplate(activeTemplateId) : 0;
 
-  const applySuggestions = () => {
-    setMappingSelections(prev => {
-      const next: Record<string, string | null> = { ...prev };
-      templateFields.forEach(field => {
-        next[field.id] = suggestionMap[field.id]?.sourceId ?? null;
-      });
-      return next;
-    });
-  };
+  const totalMapped = Object.values(mappingByTemplate).reduce(
+    (acc, mapping) => acc + Object.values(mapping).filter(Boolean).length,
+    0
+  );
 
   return (
     <Router>
@@ -219,26 +251,28 @@ export default function App() {
           <Routes>
             <Route
               path="/"
-              element={<Dashboard snapshot={snapshot} templateFields={templateFields} mappedCount={mappedCount} />}
+              element={
+                <Dashboard
+                  snapshot={snapshot}
+                  templates={templates}
+                  dataSources={dataSources}
+                  mappedCount={mappedCount}
+                  totalMapped={totalMapped}
+                />
+              }
             />
             <Route
               path="/connect"
               element={
                 <DataSources
-                  ddl={ddl}
-                  dialect={dialect}
-                  dbType={dbType}
-                  connectionString={connectionString}
+                  dataSources={dataSources}
                   loading={loading}
                   error={error}
-                  onDdlChange={setDdl}
-                  onDialectChange={setDialect}
-                  onDbTypeChange={setDbType}
-                  onConnectionChange={setConnectionString}
-                  onCsvUpload={(files) => run(() => ingestCsv(files))}
-                  onDDLAnalyze={() => run(() => ingestDDL(ddl, dialect))}
-                  onDbAnalyze={() => run(() => ingestDB(dbType, connectionString))}
-                  onSQLiteUpload={(file) => run(() => ingestSQLite(file))}
+                  onCsvIngest={(name, files) => handleIngest('CSV', name, () => ingestCsv(files))}
+                  onDDLIngest={(name, ddl, dialect) => handleIngest('DDL', name, () => ingestDDL(ddl, dialect))}
+                  onDbIngest={(name, dbType, connectionString) => handleIngest(dbType, name, () => ingestDB(dbType, connectionString))}
+                  onSQLiteIngest={(name, file) => handleIngest('SQLite', name, () => ingestSQLite(file))}
+                  onRemoveSource={(id) => setDataSources(prev => prev.filter(ds => ds.id !== id))}
                 />
               }
             />
@@ -246,20 +280,14 @@ export default function App() {
               path="/templates"
               element={
                 <Templates
-                  templateText={templateText}
-                  templateFields={templateFields}
-                  sourceFields={sourceFields}
-                  mappingSelections={mappingSelections}
-                  suggestionMap={suggestionMap}
-                  onTemplateChange={setTemplateText}
-                  onMappingChange={(fieldId, sourceId) =>
-                    setMappingSelections(prev => ({
-                      ...prev,
-                      [fieldId]: sourceId
-                    }))
-                  }
-                  onExport={exportTemplateMappings}
-                  onLoadSample={loadSampleTemplate}
+                  templates={templates}
+                  activeTemplateId={activeTemplateId}
+                  onSelectTemplate={setActiveTemplateId}
+                  onCreateTemplate={addTemplate}
+                  onUpdateTemplate={updateTemplate}
+                  onDeleteTemplate={removeTemplate}
+                  onExportMappings={exportTemplateMappings}
+                  mappedCountForTemplate={mappedCountForTemplate}
                 />
               }
             />
@@ -267,16 +295,23 @@ export default function App() {
               path="/map"
               element={
                 <SmartMapper
+                  templates={templates}
+                  activeTemplateId={activeTemplateId}
+                  onSelectTemplate={setActiveTemplateId}
                   templateFields={templateFields}
                   sourceFields={sourceFields}
                   mappingSelections={mappingSelections}
                   suggestionMap={suggestionMap}
-                  onMappingChange={(fieldId, sourceId) =>
-                    setMappingSelections(prev => ({
+                  onMappingChange={(fieldId, sourceId) => {
+                    if (!activeTemplateId) return;
+                    setMappingByTemplate(prev => ({
                       ...prev,
-                      [fieldId]: sourceId
-                    }))
-                  }
+                      [activeTemplateId]: {
+                        ...prev[activeTemplateId],
+                        [fieldId]: sourceId
+                      }
+                    }));
+                  }}
                   onApplySuggestions={applySuggestions}
                 />
               }
@@ -292,6 +327,17 @@ export default function App() {
                     snapshot && downloadTextFile('schema-snap.json', JSON.stringify(snapshot, null, 2))
                   }
                   onExportSql={() => snapshot && downloadTextFile('join-plan.sql', buildJoinPlan(snapshot))}
+                />
+              }
+            />
+            <Route
+              path="/analytics"
+              element={
+                <Analytics
+                  dataSources={dataSources}
+                  templates={templates}
+                  snapshot={snapshot}
+                  totalMapped={totalMapped}
                 />
               }
             />

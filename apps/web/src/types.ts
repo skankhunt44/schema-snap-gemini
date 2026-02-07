@@ -38,4 +38,23 @@ export type TemplateField = {
   id: string;
   name: string;
   description?: string;
+  required?: boolean;
+};
+
+export type Template = {
+  id: string;
+  name: string;
+  stakeholder: string;
+  frequency: string;
+  fields: TemplateField[];
+};
+
+export type DataSource = {
+  id: string;
+  name: string;
+  type: string;
+  status: 'connected' | 'error';
+  tableCount: number;
+  columnCount: number;
+  lastSync: string;
 };
