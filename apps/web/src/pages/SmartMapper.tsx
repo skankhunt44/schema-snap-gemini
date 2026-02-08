@@ -45,7 +45,7 @@ const SmartMapper: React.FC<Props> = ({
 
   const filteredSources = sourceFields.filter(field => {
     if (!dataSources.length) return true;
-    if (!field.sourceId) return true;
+    if (!field.sourceId) return false;
     return selectedSourceIds.includes(field.sourceId);
   });
 

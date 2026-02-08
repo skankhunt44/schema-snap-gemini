@@ -116,12 +116,8 @@ export default function App() {
 
   const sourceFields = React.useMemo(() => {
     const fromSources = dataSources.flatMap(ds => ds.fields || []);
-    const fallback = snapshot ? buildSourceFields(snapshot) : [];
-    if (!fromSources.length) return fallback;
-    const merged = new Map<string, SourceField>();
-    fallback.forEach(field => merged.set(field.id, field));
-    fromSources.forEach(field => merged.set(field.id, field));
-    return Array.from(merged.values());
+    if (fromSources.length) return fromSources;
+    return snapshot ? buildSourceFields(snapshot) : [];
   }, [snapshot, dataSources]);
 
   const heuristicSuggestionMap = React.useMemo(() => {
@@ -438,7 +434,15 @@ export default function App() {
         const state = await getState();
         if (state) {
           setSnapshot(state.snapshot);
-          setDataSources(state.dataSources || []);
+          const incomingSources = state.dataSources || [];
+          const patchedSources = incomingSources.map((ds, index) => {
+            if (ds.fields?.length) return ds;
+            if (index === 0 && state.snapshot) {
+              return { ...ds, fields: buildSourceFields(state.snapshot, ds.id, ds.name) };
+            }
+            return ds;
+          });
+          setDataSources(patchedSources);
           setTemplates(state.templates || []);
           setActiveTemplateId(state.activeTemplateId || null);
           const normalized: Record<string, Record<string, MappingEntry>> = {};
