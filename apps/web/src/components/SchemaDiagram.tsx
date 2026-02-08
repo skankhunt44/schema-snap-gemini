@@ -89,6 +89,7 @@ export default function SchemaDiagram({ tables, relationships, minConfidence, on
 
             const midX = (startX + endX) / 2;
             const midY = (startY + endY) / 2;
+            const labelY = midY - 14;
 
             return (
               <g key={rel.from.table + rel.from.column + rel.to.table + rel.to.column + i}>
@@ -104,14 +105,23 @@ export default function SchemaDiagram({ tables, relationships, minConfidence, on
                 />
                 <rect
                   x={midX - 55}
-                  y={midY - 10}
+                  y={labelY - 9}
                   width={110}
                   height={18}
                   rx={6}
                   fill="#ffffff"
                   stroke="#e2e8f0"
+                  opacity="0.92"
+                  style={{ pointerEvents: 'none' }}
                 />
-                <text x={midX} y={midY + 3} textAnchor="middle" fontSize="10" fill="#334155">
+                <text
+                  x={midX}
+                  y={labelY + 3}
+                  textAnchor="middle"
+                  fontSize="10"
+                  fill="#334155"
+                  style={{ pointerEvents: 'none' }}
+                >
                   {rel.from.column} → {rel.to.column} ({Math.round(rel.confidence * 100)}%)
                 </text>
               </g>
