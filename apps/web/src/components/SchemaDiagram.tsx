@@ -8,12 +8,12 @@ type Props = {
   onEdgeSelect?: (relationship: Relationship) => void;
 };
 
-const FIELD_HEIGHT = 28;
-const HEADER_HEIGHT = 36;
-const BOX_WIDTH = 240;
-const GAP_X = 110;
+const FIELD_HEIGHT = 32;
+const HEADER_HEIGHT = 40;
+const BOX_WIDTH = 260;
+const GAP_X = 240;
 const GAP_Y = 40;
-const PADDING_Y = 16;
+const PADDING_Y = 20;
 const START_X = 40;
 const START_Y = 30;
 
@@ -81,23 +81,23 @@ export default function SchemaDiagram({ tables, relationships, minConfidence, on
             const targetField = layout.fieldPositions[rel.to.table]?.[rel.to.column];
             if (!sourceTable || !targetTable || !sourceField || !targetField) return null;
 
-            const startX = sourceTable.x + BOX_WIDTH + 8;
+            const startX = sourceTable.x + BOX_WIDTH + 12;
             const startY = sourceField.y;
-            const endX = targetTable.x - 8;
+            const endX = targetTable.x - 12;
             const endY = targetField.y;
             const color = edgeColor(rel.confidence);
 
             const dx = endX - startX;
-            const spread = (i % 5 - 2) * 8; // stagger overlapping lines
-            const curve = Math.max(-60, Math.min(60, (startY - endY) * 0.3)) + spread;
+            const spread = (i % 5 - 2) * 10; // stagger overlapping lines
+            const curve = Math.max(-80, Math.min(80, (startY - endY) * 0.35)) + spread;
 
             const c1x = startX + dx * 0.35;
             const c2x = startX + dx * 0.65;
-            const c1y = startY + curve - 12;
-            const c2y = endY + curve - 12;
+            const c1y = startY + curve;
+            const c2y = endY + curve;
 
             const midX = (startX + endX) / 2;
-            const midY = (startY + endY) / 2 + curve - 18;
+            const midY = (startY + endY) / 2 + curve - 10;
             const labelY = midY;
 
             return (
@@ -161,6 +161,7 @@ export default function SchemaDiagram({ tables, relationships, minConfidence, on
                     <text x={BOX_WIDTH - 14} y="18" textAnchor="end" fontSize="10" fill="#94a3b8">
                       {col.dataType}
                     </text>
+                    <circle cx={0} cy={FIELD_HEIGHT / 2} r="3" fill="#94a3b8" />
                     <circle cx={BOX_WIDTH} cy={FIELD_HEIGHT / 2} r="3" fill="#64748b" />
                   </g>
                 ))}
