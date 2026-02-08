@@ -29,12 +29,6 @@ export default function SchemaDiagram({ tables, relationships, minConfidence, on
     const tablePositions: Record<string, { x: number; y: number; height: number }> = {};
     const fieldPositions: Record<string, Record<string, { x: number; y: number }>> = {};
 
-    const heights = new Map<string, number>();
-    tables.forEach(t => {
-      heights.set(t.name, HEADER_HEIGHT + t.columns.length * FIELD_HEIGHT + PADDING_Y);
-    });
-
-    // Degree-based layout: center most-connected table, others fan left/right
     const degree: Record<string, number> = {};
     tables.forEach(t => (degree[t.name] = 0));
     relationships.forEach(r => {
@@ -43,52 +37,64 @@ export default function SchemaDiagram({ tables, relationships, minConfidence, on
     });
 
     const sorted = [...tables].sort((a, b) => (degree[b.name] || 0) - (degree[a.name] || 0));
-    const center = sorted[0];
+    const hub = sorted[0];
 
-    const columnX = [
-      START_X + GAP_X, // left
-      START_X + GAP_X * 3, // right
-      START_X, // far left
-      START_X + GAP_X * 4 // far right
-    ];
-
-    const columnY = columnX.map(() => START_Y);
-
-    if (center) {
-      const centerX = START_X + GAP_X * 2;
-      const centerY = START_Y + 60;
-      tablePositions[center.name] = { x: centerX, y: centerY, height: heights.get(center.name)! };
-
-      const fields: Record<string, { x: number; y: number }> = {};
-      center.columns.forEach((col, i) => {
-        const fieldY = centerY + HEADER_HEIGHT + i * FIELD_HEIGHT + FIELD_HEIGHT / 2;
-        fields[col.name] = { x: centerX + BOX_WIDTH, y: fieldY };
-      });
-      fieldPositions[center.name] = fields;
+    if (!hub) {
+      return { tablePositions, fieldPositions, width: CANVAS_WIDTH, height: 300 };
     }
 
-    const remaining = sorted.slice(1);
-    remaining.forEach((table, idx) => {
-      const colIdx = idx % columnX.length;
-      const x = columnX[colIdx];
-      const y = columnY[colIdx];
-      const height = heights.get(table.name)!;
-      tablePositions[table.name] = { x, y, height };
-
-      const fields: Record<string, { x: number; y: number }> = {};
-      table.columns.forEach((col, i) => {
-        const fieldY = y + HEADER_HEIGHT + i * FIELD_HEIGHT + FIELD_HEIGHT / 2;
-        fields[col.name] = { x: x + BOX_WIDTH, y: fieldY };
-      });
-      fieldPositions[table.name] = fields;
-
-      columnY[colIdx] += height + GAP_Y;
+    const related = relationships.filter(r => r.from.table === hub.name || r.to.table === hub.name);
+    const hubColumns = new Set<string>();
+    related.forEach(r => {
+      if (r.from.table === hub.name) hubColumns.add(r.from.column);
+      if (r.to.table === hub.name) hubColumns.add(r.to.column);
     });
 
-    const width = START_X + GAP_X * 5 + BOX_WIDTH;
-    const height = Math.max(...columnY, START_Y + 200) + 100;
+    const hubFields = hub.columns.filter(c => hubColumns.has(c.name));
+    const hubHeight = HEADER_HEIGHT + Math.max(hubFields.length, 1) * FIELD_HEIGHT + PADDING_Y;
 
-    return { tablePositions, fieldPositions, width, height };
+    const hubX = CANVAS_WIDTH - BOX_WIDTH - 50;
+    const hubY = START_Y;
+
+    tablePositions[hub.name] = { x: hubX, y: hubY, height: hubHeight };
+    const hubFieldPositions: Record<string, { x: number; y: number }> = {};
+    hubFields.forEach((col, i) => {
+      const fieldY = hubY + HEADER_HEIGHT + i * FIELD_HEIGHT + FIELD_HEIGHT / 2;
+      hubFieldPositions[col.name] = { x: hubX, y: fieldY };
+    });
+    fieldPositions[hub.name] = hubFieldPositions;
+
+    const sources = sorted.slice(1).filter(t =>
+      related.some(r => r.from.table === t.name || r.to.table === t.name)
+    );
+
+    let currentY = START_Y;
+    sources.forEach(source => {
+      const relCols = new Set<string>();
+      related.forEach(r => {
+        if (r.from.table === source.name) relCols.add(r.from.column);
+        if (r.to.table === source.name) relCols.add(r.to.column);
+      });
+
+      const sourceFields = source.columns.filter(c => relCols.has(c.name));
+      const sourceHeight = HEADER_HEIGHT + Math.max(sourceFields.length, 1) * FIELD_HEIGHT + PADDING_Y;
+      const sourceX = START_X;
+      const sourceY = currentY;
+
+      tablePositions[source.name] = { x: sourceX, y: sourceY, height: sourceHeight };
+      const fields: Record<string, { x: number; y: number }> = {};
+      sourceFields.forEach((col, i) => {
+        const fieldY = sourceY + HEADER_HEIGHT + i * FIELD_HEIGHT + FIELD_HEIGHT / 2;
+        fields[col.name] = { x: sourceX + BOX_WIDTH, y: fieldY };
+      });
+      fieldPositions[source.name] = fields;
+
+      currentY += sourceHeight + 30;
+    });
+
+    const height = Math.max(currentY + 100, hubY + hubHeight + 100, 400);
+
+    return { tablePositions, fieldPositions, width: CANVAS_WIDTH, height };
   }, [tables, relationships]);
 
   const filteredRels = relationships.filter(r => r.confidence >= minConfidence);
@@ -161,7 +167,10 @@ export default function SchemaDiagram({ tables, relationships, minConfidence, on
 
           {tables.map(table => {
             const pos = layout.tablePositions[table.name];
+            if (!pos) return null;
             const height = pos.height;
+            const fields = layout.fieldPositions[table.name] || {};
+            const visibleColumns = table.columns.filter(c => fields[c.name]);
             return (
               <g key={table.name} transform={`translate(${pos.x}, ${pos.y})`}>
                 <rect width={BOX_WIDTH} height={height} rx="10" fill="white" stroke="#e2e8f0" />
@@ -170,10 +179,10 @@ export default function SchemaDiagram({ tables, relationships, minConfidence, on
                   {table.name}
                 </text>
                 <text x={BOX_WIDTH - 14} y="22" textAnchor="end" fontSize="10" fill="#94a3b8">
-                  {table.columns.length} columns
+                  {visibleColumns.length} columns
                 </text>
 
-                {table.columns.map((col, idx) => (
+                {visibleColumns.map((col, idx) => (
                   <g key={col.name} transform={`translate(0, ${HEADER_HEIGHT + idx * FIELD_HEIGHT})`}>
                     <text x="14" y="18" fontSize="11" fill="#334155">
                       {col.name}
