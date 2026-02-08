@@ -1,23 +1,29 @@
 import React from 'react';
-import SchemaDiagram from '../components/SchemaDiagram';
-import { Relationship, SchemaSnapshot } from '../types';
+import TemplateDiagram from '../components/TemplateDiagram';
+import { MappingEntry, SchemaSnapshot, Template } from '../types';
+
+type SourceField = {
+  id: string;
+  table: string;
+  column: string;
+  dataType: string;
+};
 
 type Props = {
   snapshot: SchemaSnapshot | null;
-  selectedRel: Relationship | null;
-  onSelectRel: (rel: Relationship) => void;
+  template: Template | null;
+  mappings: Record<string, MappingEntry>;
+  sourceFields: SourceField[];
   onExportJson: () => void;
   onExportSql: () => void;
 };
 
-const Relationships: React.FC<Props> = ({ snapshot, selectedRel, onSelectRel, onExportJson, onExportSql }) => {
-  const [minConfidence, setMinConfidence] = React.useState(0.6);
-
+const Relationships: React.FC<Props> = ({ snapshot, template, mappings, sourceFields, onExportJson, onExportSql }) => {
   return (
     <div className="p-6">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-slate-900">Relationships</h1>
-        <p className="text-slate-500">Inspect inferred joins and evidence from Gemini + heuristics.</p>
+        <h1 className="text-2xl font-bold text-slate-900">Mappings</h1>
+        <p className="text-slate-500">Visualize data → template mappings (autoreport style).</p>
       </div>
 
       <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm mb-6">
@@ -30,55 +36,11 @@ const Relationships: React.FC<Props> = ({ snapshot, selectedRel, onSelectRel, on
               Export SQL Join Plan
             </button>
           </div>
-          <div className="flex items-center gap-2 text-sm text-slate-500">
-            <span>Min confidence</span>
-            <select
-              value={minConfidence}
-              onChange={(e) => setMinConfidence(Number(e.target.value))}
-              className="border border-slate-200 rounded-lg px-3 py-2"
-            >
-              <option value={0}>Show all</option>
-              <option value={0.6}>≥ 0.60</option>
-              <option value={0.8}>≥ 0.80</option>
-            </select>
-          </div>
         </div>
         {snapshot ? (
-          <SchemaDiagram
-            tables={snapshot.tables}
-            relationships={snapshot.relationships}
-            minConfidence={minConfidence}
-            onEdgeSelect={onSelectRel}
-          />
+          <TemplateDiagram template={template} mappings={mappings} sourceFields={sourceFields} />
         ) : (
-          <p className="text-sm text-slate-500">Upload data sources to view relationships.</p>
-        )}
-      </div>
-
-      <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
-        <h3 className="font-semibold text-slate-900 mb-2">Selected relationship</h3>
-        {selectedRel ? (
-          <div>
-            <p className="text-sm text-slate-700">
-              <strong>{selectedRel.from.table}.{selectedRel.from.column}</strong>
-              {' → '}
-              <strong>{selectedRel.to.table}.{selectedRel.to.column}</strong>
-            </p>
-            <p className="text-xs text-slate-400 mt-1">
-              Type: {selectedRel.type} • Confidence: {Math.round(selectedRel.confidence * 100)}% • {selectedRel.suggestedBy}
-            </p>
-            <p className="text-sm text-slate-600 mt-2">{selectedRel.rationale}</p>
-            {selectedRel.evidence && (
-              <ul className="text-xs text-slate-500 mt-2 space-y-1">
-                {selectedRel.evidence.nameScore !== undefined && <li>Name similarity: {selectedRel.evidence.nameScore}</li>}
-                {selectedRel.evidence.typeScore !== undefined && <li>Type match: {selectedRel.evidence.typeScore}</li>}
-                {selectedRel.evidence.uniquenessScore !== undefined && <li>Uniqueness: {selectedRel.evidence.uniquenessScore}</li>}
-                {selectedRel.evidence.overlapScore !== undefined && <li>Value overlap: {selectedRel.evidence.overlapScore}</li>}
-              </ul>
-            )}
-          </div>
-        ) : (
-          <p className="text-sm text-slate-500">Click an edge in the graph to view details.</p>
+          <p className="text-sm text-slate-500">Upload data sources to view mappings.</p>
         )}
       </div>
     </div>

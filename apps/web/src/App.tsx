@@ -547,8 +547,9 @@ export default function App() {
               element={
                 <Relationships
                   snapshot={snapshot}
-                  selectedRel={selectedRel}
-                  onSelectRel={setSelectedRel}
+                  template={activeTemplate}
+                  mappings={mappingEntries}
+                  sourceFields={sourceFields}
                   onExportJson={() =>
                     snapshot && downloadTextFile('schema-snap.json', JSON.stringify(snapshot, null, 2))
                   }
