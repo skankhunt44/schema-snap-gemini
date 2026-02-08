@@ -11,11 +11,11 @@ type Props = {
 const FIELD_HEIGHT = 32;
 const HEADER_HEIGHT = 40;
 const BOX_WIDTH = 260;
-const GAP_X = 240;
-const GAP_Y = 40;
+const GAP_X = 300; // match autoreport
 const PADDING_Y = 20;
-const START_X = 40;
-const START_Y = 30;
+const START_X = 50; // match autoreport
+const START_Y = 50; // match autoreport
+const CANVAS_WIDTH = 900; // match autoreport
 
 const edgeColor = (confidence: number) => {
   if (confidence >= 0.8) return '#16a34a';
@@ -25,39 +25,30 @@ const edgeColor = (confidence: number) => {
 
 export default function SchemaDiagram({ tables, relationships, minConfidence, onEdgeSelect }: Props) {
   const layout = useMemo(() => {
-    const cols = Math.min(3, Math.max(1, tables.length));
-    const rows: TableSchema[][] = [];
-    for (let i = 0; i < tables.length; i += cols) {
-      rows.push(tables.slice(i, i + cols));
-    }
-
     const tablePositions: Record<string, { x: number; y: number; height: number }> = {};
     const fieldPositions: Record<string, Record<string, { x: number; y: number }>> = {};
 
-    let currentY = START_Y;
-    rows.forEach((row, rowIdx) => {
-      const heights = row.map(t => HEADER_HEIGHT + t.columns.length * FIELD_HEIGHT + PADDING_Y);
-      const rowHeight = Math.max(...heights, HEADER_HEIGHT + FIELD_HEIGHT + PADDING_Y);
+    // Autoreport-style left-to-right single row
+    const cols = tables.length || 1;
+    const startY = START_Y;
 
-      row.forEach((table, colIdx) => {
-        const x = START_X + colIdx * (BOX_WIDTH + GAP_X);
-        const y = currentY;
-        const height = HEADER_HEIGHT + table.columns.length * FIELD_HEIGHT + PADDING_Y;
-        tablePositions[table.name] = { x, y, height };
+    tables.forEach((table, colIdx) => {
+      const x = START_X + colIdx * GAP_X;
+      const y = startY;
+      const height = HEADER_HEIGHT + table.columns.length * FIELD_HEIGHT + PADDING_Y;
+      tablePositions[table.name] = { x, y, height };
 
-        const fields: Record<string, { x: number; y: number }> = {};
-        table.columns.forEach((col, i) => {
-          const fieldY = y + HEADER_HEIGHT + i * FIELD_HEIGHT + FIELD_HEIGHT / 2;
-          fields[col.name] = { x: x + BOX_WIDTH, y: fieldY };
-        });
-        fieldPositions[table.name] = fields;
+      const fields: Record<string, { x: number; y: number }> = {};
+      table.columns.forEach((col, i) => {
+        const fieldY = y + HEADER_HEIGHT + i * FIELD_HEIGHT + FIELD_HEIGHT / 2;
+        fields[col.name] = { x: x + BOX_WIDTH, y: fieldY };
       });
-
-      currentY += rowHeight + GAP_Y;
+      fieldPositions[table.name] = fields;
     });
 
-    const width = START_X + cols * BOX_WIDTH + (cols - 1) * GAP_X + START_X;
-    const height = currentY + START_Y;
+    const width = CANVAS_WIDTH;
+    const maxHeight = Math.max(...tables.map(t => HEADER_HEIGHT + t.columns.length * FIELD_HEIGHT + PADDING_Y), 200);
+    const height = Math.max(startY + maxHeight + 100, 400);
 
     return { tablePositions, fieldPositions, width, height };
   }, [tables]);
@@ -81,29 +72,20 @@ export default function SchemaDiagram({ tables, relationships, minConfidence, on
             const targetField = layout.fieldPositions[rel.to.table]?.[rel.to.column];
             if (!sourceTable || !targetTable || !sourceField || !targetField) return null;
 
-            const startX = sourceTable.x + BOX_WIDTH + 12;
+            const startX = sourceTable.x + BOX_WIDTH;
             const startY = sourceField.y;
-            const endX = targetTable.x - 12;
+            const endX = targetTable.x;
             const endY = targetField.y;
             const color = edgeColor(rel.confidence);
 
-            const dx = endX - startX;
-            const spread = (i % 5 - 2) * 10; // stagger overlapping lines
-            const curve = Math.max(-80, Math.min(80, (startY - endY) * 0.35)) + spread;
-
-            const c1x = startX + dx * 0.35;
-            const c2x = startX + dx * 0.65;
-            const c1y = startY + curve;
-            const c2y = endY + curve;
-
             const midX = (startX + endX) / 2;
-            const midY = (startY + endY) / 2 + curve - 10;
-            const labelY = midY;
+            const midY = (startY + endY) / 2;
+            const labelY = midY - 14;
 
             return (
               <g key={rel.from.table + rel.from.column + rel.to.table + rel.to.column + i}>
                 <path
-                  d={`M ${startX} ${startY} C ${c1x} ${c1y}, ${c2x} ${c2y}, ${endX} ${endY}`}
+                  d={`M ${startX} ${startY} C ${startX + 100} ${startY}, ${endX - 100} ${endY}, ${endX} ${endY}`}
                   fill="none"
                   stroke={color}
                   strokeWidth="2"
