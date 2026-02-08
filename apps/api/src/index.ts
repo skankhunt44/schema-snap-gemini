@@ -16,16 +16,35 @@ import { ingestMySQL, ingestPostgres, ingestSQLite } from './ingest/db';
 import { inferRelationships } from './infer';
 import { suggestMappingsGemini } from './map/suggest';
 import { loadSampleTables } from './samples';
+import { readState, writeState } from './store';
 import { SchemaSnapshot, TableSchema } from './types/schema';
 
 const app = express();
 const upload = multer();
 
 app.use(cors());
-app.use(express.json({ limit: '2mb' }));
+app.use(express.json({ limit: '5mb' }));
 
 app.get('/api/health', (_req, res) => {
   res.json({ ok: true });
+});
+
+app.get('/api/state', async (_req, res) => {
+  try {
+    const state = await readState();
+    res.json({ state });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Failed to read state' });
+  }
+});
+
+app.post('/api/state', async (req, res) => {
+  try {
+    await writeState(req.body);
+    res.json({ ok: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Failed to save state' });
+  }
 });
 
 app.post('/api/ingest/csv', upload.array('files'), async (req, res) => {

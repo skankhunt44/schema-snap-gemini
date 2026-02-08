@@ -1,4 +1,4 @@
-import { SchemaSnapshot } from '../types';
+import { PersistedState, SchemaSnapshot } from '../types';
 
 type SourceField = { id: string; name: string; description?: string; dataType?: string };
 
@@ -59,4 +59,20 @@ export const loadSampleSnapshot = async (): Promise<SchemaSnapshot> => {
   const res = await fetch('/api/samples');
   if (!res.ok) throw new Error(await res.text());
   return res.json();
+};
+
+export const getState = async (): Promise<PersistedState | null> => {
+  const res = await fetch('/api/state');
+  if (!res.ok) throw new Error(await res.text());
+  const data = await res.json();
+  return data.state || null;
+};
+
+export const saveState = async (state: PersistedState) => {
+  const res = await fetch('/api/state', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(state)
+  });
+  if (!res.ok) throw new Error(await res.text());
 };

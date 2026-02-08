@@ -58,3 +58,11 @@ export type DataSource = {
   columnCount: number;
   lastSync: string;
 };
+
+export type PersistedState = {
+  snapshot: SchemaSnapshot | null;
+  dataSources: DataSource[];
+  templates: Template[];
+  activeTemplateId: string | null;
+  mappingByTemplate: Record<string, Record<string, string | null>>;
+};

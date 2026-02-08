@@ -1,6 +1,6 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { ingestCsv, ingestDDL, ingestDB, ingestSQLite, loadSampleSnapshot, suggestMappings } from './lib/api';
+import { ingestCsv, ingestDDL, ingestDB, ingestSQLite, getState, loadSampleSnapshot, saveState, suggestMappings } from './lib/api';
 import { DataSource, Relationship, SchemaSnapshot, Template, TemplateField } from './types';
 import Sidebar from './components/Sidebar';
 import Dashboard from './pages/Dashboard';
@@ -24,6 +24,8 @@ export default function App() {
   const [aiError, setAiError] = React.useState<string | null>(null);
   const [selectedRel, setSelectedRel] = React.useState<Relationship | null>(null);
   const [aiSuggestionsByTemplate, setAiSuggestionsByTemplate] = React.useState<Record<string, Record<string, { sourceId: string | null; confidence: number; rationale: string }>>>({});
+
+  const [hydrated, setHydrated] = React.useState(false);
 
   const activeTemplate = templates.find(t => t.id === activeTemplateId) || null;
   const templateFields = activeTemplate?.fields ?? [];
@@ -319,10 +321,41 @@ export default function App() {
   );
 
   React.useEffect(() => {
-    if (dataSources.length || templates.length) return;
-    const seeded = localStorage.getItem('schemaSnapSeeded');
-    if (seeded) return;
-    loadSampleData().finally(() => localStorage.setItem('schemaSnapSeeded', 'true'));
+    if (!hydrated) return;
+    const timer = setTimeout(() => {
+      saveState({
+        snapshot,
+        dataSources,
+        templates,
+        activeTemplateId,
+        mappingByTemplate
+      }).catch(() => undefined);
+    }, 500);
+
+    return () => clearTimeout(timer);
+  }, [hydrated, snapshot, dataSources, templates, activeTemplateId, mappingByTemplate]);
+
+  React.useEffect(() => {
+    const init = async () => {
+      try {
+        const state = await getState();
+        if (state) {
+          setSnapshot(state.snapshot);
+          setDataSources(state.dataSources || []);
+          setTemplates(state.templates || []);
+          setActiveTemplateId(state.activeTemplateId || null);
+          setMappingByTemplate(state.mappingByTemplate || {});
+        } else {
+          await loadSampleData();
+        }
+      } catch (e) {
+        await loadSampleData();
+      } finally {
+        setHydrated(true);
+      }
+    };
+
+    init();
   }, []);
 
   return (
