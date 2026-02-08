@@ -81,25 +81,34 @@ export default function SchemaDiagram({ tables, relationships, minConfidence, on
             const targetField = layout.fieldPositions[rel.to.table]?.[rel.to.column];
             if (!sourceTable || !targetTable || !sourceField || !targetField) return null;
 
-            const startX = sourceTable.x + BOX_WIDTH;
+            const startX = sourceTable.x + BOX_WIDTH + 8;
             const startY = sourceField.y;
-            const endX = targetTable.x;
+            const endX = targetTable.x - 8;
             const endY = targetField.y;
             const color = edgeColor(rel.confidence);
 
+            const dx = endX - startX;
+            const spread = (i % 5 - 2) * 8; // stagger overlapping lines
+            const curve = Math.max(-60, Math.min(60, (startY - endY) * 0.3)) + spread;
+
+            const c1x = startX + dx * 0.35;
+            const c2x = startX + dx * 0.65;
+            const c1y = startY + curve - 12;
+            const c2y = endY + curve - 12;
+
             const midX = (startX + endX) / 2;
-            const midY = (startY + endY) / 2;
-            const labelY = midY - 14;
+            const midY = (startY + endY) / 2 + curve - 18;
+            const labelY = midY;
 
             return (
               <g key={rel.from.table + rel.from.column + rel.to.table + rel.to.column + i}>
                 <path
-                  d={`M ${startX} ${startY} C ${startX + 80} ${startY}, ${endX - 80} ${endY}, ${endX} ${endY}`}
+                  d={`M ${startX} ${startY} C ${c1x} ${c1y}, ${c2x} ${c2y}, ${endX} ${endY}`}
                   fill="none"
                   stroke={color}
                   strokeWidth="2"
                   markerEnd="url(#arrowhead)"
-                  className="opacity-80 hover:opacity-100"
+                  className="opacity-85 hover:opacity-100"
                   onClick={() => onEdgeSelect?.(rel)}
                   style={{ cursor: 'pointer' }}
                 />
