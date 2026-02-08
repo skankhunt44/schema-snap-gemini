@@ -39,11 +39,18 @@ export const ingestDDL = (ddl: string, dialect: string): TableSchema[] => {
 
     const columns = defs
       .filter((d: any) => d.column)
-      .map((d: any) => ({
-        name: d.column.column,
-        dataType: mapSqlType(d.definition?.dataType || d.definition?.data_type),
-        sampleValues: []
-      }));
+      .map((d: any) => {
+        const raw = d.column?.column ?? d.column?.name ?? d.column;
+        const name =
+          typeof raw === 'string'
+            ? raw
+            : raw?.value ?? raw?.expr?.value ?? raw?.expr?.column ?? raw?.column ?? 'unknown';
+        return {
+          name,
+          dataType: mapSqlType(d.definition?.dataType || d.definition?.data_type),
+          sampleValues: []
+        };
+      });
 
     tables.push({
       name: tableName,
