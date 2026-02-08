@@ -174,6 +174,10 @@ export default function App() {
 
   const applySuggestions = async (sources = sourceFields) => {
     if (!activeTemplateId) return;
+    if (!sources.length) {
+      setAiError('Select at least one data source before running Auto-Map.');
+      return;
+    }
     setAiLoading(true);
     setAiError(null);
 
@@ -435,12 +439,20 @@ export default function App() {
         if (state) {
           setSnapshot(state.snapshot);
           const incomingSources = state.dataSources || [];
-          const patchedSources = incomingSources.map((ds, index) => {
+          const tableLookup = new Map(
+            (state.snapshot?.tables || []).map(table => [normalize(table.name), table])
+          );
+          const patchedSources = incomingSources.map(ds => {
             if (ds.fields?.length) return ds;
-            if (index === 0 && state.snapshot) {
-              return { ...ds, fields: buildSourceFields(state.snapshot, ds.id, ds.name) };
+            if (!state.snapshot) return ds;
+            const matchedTable = tableLookup.get(normalize(ds.name));
+            if (matchedTable) {
+              return {
+                ...ds,
+                fields: buildSourceFields({ tables: [matchedTable], relationships: [] }, ds.id, ds.name)
+              };
             }
-            return ds;
+            return { ...ds, fields: buildSourceFields(state.snapshot, ds.id, ds.name) };
           });
           setDataSources(patchedSources);
           setTemplates(state.templates || []);

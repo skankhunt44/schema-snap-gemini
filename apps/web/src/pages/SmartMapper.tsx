@@ -79,7 +79,7 @@ const SmartMapper: React.FC<Props> = ({
           <button
             onClick={() => onApplySuggestions(filteredSources)}
             className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg shadow-sm disabled:opacity-60"
-            disabled={!templateFields.length || aiLoading}
+            disabled={!templateFields.length || !filteredSources.length || aiLoading}
           >
             <RefreshCw size={18} className={aiLoading ? 'animate-spin' : ''} />
             {aiLoading ? 'AI Thinking…' : 'Auto-Map with Gemini'}
@@ -112,6 +112,9 @@ const SmartMapper: React.FC<Props> = ({
               </label>
             ))}
           </div>
+          {!filteredSources.length && (
+            <p className="text-xs text-rose-500 mt-2">Select at least one source to enable Auto-Map.</p>
+          )}
         </div>
       )}
 
