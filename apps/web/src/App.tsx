@@ -1,6 +1,6 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { ingestCsv, ingestDDL, ingestDB, ingestSQLite } from './lib/api';
+import { ingestCsv, ingestDDL, ingestDB, ingestSQLite, suggestMappings } from './lib/api';
 import { DataSource, Relationship, SchemaSnapshot, Template, TemplateField } from './types';
 import Sidebar from './components/Sidebar';
 import Dashboard from './pages/Dashboard';
@@ -20,7 +20,10 @@ export default function App() {
 
   const [error, setError] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(false);
+  const [aiLoading, setAiLoading] = React.useState(false);
+  const [aiError, setAiError] = React.useState<string | null>(null);
   const [selectedRel, setSelectedRel] = React.useState<Relationship | null>(null);
+  const [aiSuggestionsByTemplate, setAiSuggestionsByTemplate] = React.useState<Record<string, Record<string, { sourceId: string | null; confidence: number; rationale: string }>>>({});
 
   const activeTemplate = templates.find(t => t.id === activeTemplateId) || null;
   const templateFields = activeTemplate?.fields ?? [];
@@ -107,7 +110,7 @@ export default function App() {
     );
   }, [snapshot]);
 
-  const suggestionMap = React.useMemo(() => {
+  const heuristicSuggestionMap = React.useMemo(() => {
     const map: Record<string, { sourceId: string | null; confidence: number; rationale: string }> = {};
     if (!snapshot || !templateFields.length) return map;
 
@@ -129,6 +132,9 @@ export default function App() {
   }, [templateFields, sourceFields, snapshot]);
 
   const mappingSelections = activeTemplateId ? mappingByTemplate[activeTemplateId] || {} : {};
+  const suggestionMap = activeTemplateId && aiSuggestionsByTemplate[activeTemplateId]
+    ? aiSuggestionsByTemplate[activeTemplateId]
+    : heuristicSuggestionMap;
 
   React.useEffect(() => {
     if (!activeTemplateId) return;
@@ -144,15 +150,47 @@ export default function App() {
     });
   }, [activeTemplateId, templateFields, suggestionMap]);
 
-  const applySuggestions = () => {
+  const applySuggestions = async () => {
     if (!activeTemplateId) return;
-    setMappingByTemplate(prev => {
-      const next: Record<string, string | null> = { ...prev[activeTemplateId] };
-      templateFields.forEach(field => {
-        next[field.id] = suggestionMap[field.id]?.sourceId ?? null;
+    setAiLoading(true);
+    setAiError(null);
+
+    try {
+      const payloadSourceFields = sourceFields.map(field => ({
+        id: field.id,
+        name: field.column,
+        description: field.table,
+        dataType: field.dataType
+      }));
+      const payloadTemplateFields = templateFields.map(field => ({
+        id: field.id,
+        name: field.name,
+        description: field.description
+      }));
+
+      const result = await suggestMappings(payloadSourceFields, payloadTemplateFields);
+      const map: Record<string, { sourceId: string | null; confidence: number; rationale: string }> = {};
+      result.mappings.forEach(mapping => {
+        map[mapping.templateFieldId] = {
+          sourceId: mapping.sourceFieldId ?? null,
+          confidence: mapping.confidence ?? 0,
+          rationale: mapping.rationale || ''
+        };
       });
-      return { ...prev, [activeTemplateId]: next };
-    });
+
+      setAiSuggestionsByTemplate(prev => ({ ...prev, [activeTemplateId]: map }));
+      setMappingByTemplate(prev => {
+        const next: Record<string, string | null> = {};
+        templateFields.forEach(field => {
+          next[field.id] = map[field.id]?.sourceId ?? null;
+        });
+        return { ...prev, [activeTemplateId]: next };
+      });
+    } catch (err: any) {
+      setAiError(err.message || 'AI mapping failed');
+    } finally {
+      setAiLoading(false);
+    }
   };
 
   const exportTemplateMappings = () => {
@@ -302,6 +340,8 @@ export default function App() {
                   sourceFields={sourceFields}
                   mappingSelections={mappingSelections}
                   suggestionMap={suggestionMap}
+                  aiLoading={aiLoading}
+                  aiError={aiError}
                   onMappingChange={(fieldId, sourceId) => {
                     if (!activeTemplateId) return;
                     setMappingByTemplate(prev => ({

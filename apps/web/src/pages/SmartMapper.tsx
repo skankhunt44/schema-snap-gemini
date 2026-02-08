@@ -12,6 +12,8 @@ type Props = {
   sourceFields: SourceField[];
   mappingSelections: Record<string, string | null>;
   suggestionMap: Record<string, { sourceId: string | null; confidence: number; rationale: string }>;
+  aiLoading: boolean;
+  aiError: string | null;
   onMappingChange: (fieldId: string, sourceId: string | null) => void;
   onApplySuggestions: () => void;
 };
@@ -24,6 +26,8 @@ const SmartMapper: React.FC<Props> = ({
   sourceFields,
   mappingSelections,
   suggestionMap,
+  aiLoading,
+  aiError,
   onMappingChange,
   onApplySuggestions
 }) => {
@@ -49,13 +53,20 @@ const SmartMapper: React.FC<Props> = ({
           </select>
           <button
             onClick={onApplySuggestions}
-            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg shadow-sm"
-            disabled={!templateFields.length}
+            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg shadow-sm disabled:opacity-60"
+            disabled={!templateFields.length || aiLoading}
           >
-            <RefreshCw size={18} /> Apply AI Suggestions
+            <RefreshCw size={18} className={aiLoading ? 'animate-spin' : ''} />
+            {aiLoading ? 'AI Thinking…' : 'Auto-Map with Gemini'}
           </button>
         </div>
       </div>
+
+      {aiError && (
+        <div className="bg-rose-50 border border-rose-200 text-rose-700 rounded-lg px-4 py-2 mb-4 text-sm">
+          {aiError}
+        </div>
+      )}
 
       {templateFields.length === 0 ? (
         <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm text-slate-500">

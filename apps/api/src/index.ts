@@ -14,6 +14,7 @@ import { ingestCsvBuffer } from './ingest/csv';
 import { ingestDDL } from './ingest/ddl';
 import { ingestMySQL, ingestPostgres, ingestSQLite } from './ingest/db';
 import { inferRelationships } from './infer';
+import { suggestMappingsGemini } from './map/suggest';
 import { SchemaSnapshot, TableSchema } from './types/schema';
 
 const app = express();
@@ -88,6 +89,23 @@ app.post('/api/ingest/sqlite', upload.single('file'), async (req, res) => {
     res.json(snapshot);
   } catch (err: any) {
     res.status(500).json({ error: err.message || 'SQLite ingest failed' });
+  }
+});
+
+app.post('/api/mappings/suggest', async (req, res) => {
+  try {
+    const { sourceFields, templateFields } = req.body || {};
+    if (!sourceFields?.length || !templateFields?.length) {
+      return res.status(400).json({ error: 'sourceFields and templateFields are required' });
+    }
+
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) return res.status(400).json({ error: 'GEMINI_API_KEY not configured on server' });
+
+    const mappings = await suggestMappingsGemini(sourceFields, templateFields, apiKey);
+    res.json({ mappings });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'AI mapping failed' });
   }
 });
 
