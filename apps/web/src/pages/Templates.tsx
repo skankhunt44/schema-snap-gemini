@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { FileText, Plus, Edit, Trash2, UploadCloud, Wand2 } from 'lucide-react';
+import * as XLSX from 'xlsx';
 import { Template, TemplateField } from '../types';
 import ConfirmDialog from '../components/ConfirmDialog';
 
@@ -38,6 +39,7 @@ const Templates: React.FC<Props> = ({
   const [frequency, setFrequency] = useState('Monthly');
   const [fields, setFields] = useState<TemplateField[]>([emptyField()]);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  const [dragActive, setDragActive] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -97,17 +99,36 @@ const Templates: React.FC<Props> = ({
     setFields(prev => prev.map((f, i) => (i === idx ? { ...f, [key]: value } : f)));
   };
 
-  const importFromCsv = (file: File) => {
+  const importFromFile = (file: File) => {
     const reader = new FileReader();
     reader.onload = () => {
-      const text = String(reader.result || '');
-      const [headerLine] = text.split(/\r?\n/);
-      const headers = headerLine.split(',').map(h => h.replace(/"/g, '').trim()).filter(Boolean);
+      const data = reader.result;
+      if (!data) return;
+
+      let headers: string[] = [];
+
+      if (file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) {
+        const workbook = XLSX.read(data, { type: 'array' });
+        const sheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[sheetName];
+        const jsonData = XLSX.utils.sheet_to_json<any[]>(worksheet, { header: 1 });
+        if (jsonData.length > 0) {
+          headers = (jsonData[0] as any[]).map(h => String(h ?? '').trim()).filter(Boolean);
+        }
+      } else {
+        const text = new TextDecoder().decode(data as ArrayBuffer);
+        const [headerLine] = text.split(/\r?\n/);
+        headers = headerLine
+          .split(',')
+          .map(h => h.replace(/"/g, '').trim())
+          .filter(Boolean);
+      }
+
       if (headers.length) {
         setFields(headers.map(h => ({ id: `tf_${Date.now()}_${h}`, name: h, description: '', required: true })));
       }
     };
-    reader.readAsText(file);
+    reader.readAsArrayBuffer(file);
   };
 
   return (
@@ -217,17 +238,35 @@ const Templates: React.FC<Props> = ({
                   </select>
                 </div>
                 <div>
-                  <label className="text-xs uppercase tracking-wide text-slate-500">Import CSV (headers)</label>
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept=".csv"
-                    onChange={(e) => {
-                      const file = e.target.files?.[0];
-                      if (file) importFromCsv(file);
+                  <label className="text-xs uppercase tracking-wide text-slate-500">Import CSV/Excel (headers)</label>
+                  <div
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      setDragActive(true);
                     }}
-                    className="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"
-                  />
+                    onDragLeave={() => setDragActive(false)}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      setDragActive(false);
+                      const file = e.dataTransfer.files?.[0];
+                      if (file) importFromFile(file);
+                    }}
+                    className={`mt-1 border-2 border-dashed rounded-xl p-4 text-center text-sm ${
+                      dragActive ? 'border-indigo-500 bg-indigo-50' : 'border-slate-200 bg-slate-50'
+                    }`}
+                  >
+                    <p className="text-slate-500">Drag & drop CSV/XLSX here or click to browse</p>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept=".csv,.xlsx,.xls"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) importFromFile(file);
+                      }}
+                      className="mt-3 block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"
+                    />
+                  </div>
                 </div>
               </div>
 
