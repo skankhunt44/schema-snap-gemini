@@ -84,12 +84,12 @@ const SmartMapper: React.FC<Props> = ({
             {templateFields.map((field) => {
               const suggestion = suggestionMap[field.id];
               return (
-                <div key={field.id} className="grid grid-cols-5 gap-4 px-6 py-4">
-                  <div className="col-span-2">
+                <div key={field.id} className="grid grid-cols-1 lg:grid-cols-6 gap-4 px-6 py-4">
+                  <div className="lg:col-span-2">
                     <p className="font-medium text-slate-900">{field.name}</p>
                     {field.description && <p className="text-xs text-slate-500">{field.description}</p>}
                   </div>
-                  <div className="col-span-2">
+                  <div className="lg:col-span-2">
                     <select
                       className="w-full border border-slate-200 rounded-lg px-3 py-2"
                       value={mappingSelections[field.id] ?? ''}
@@ -104,9 +104,16 @@ const SmartMapper: React.FC<Props> = ({
                     </select>
                     <p className="text-xs text-slate-400 mt-1">Suggested: {suggestion?.sourceId ?? '—'}</p>
                   </div>
-                  <div className="flex items-center gap-2 text-sm text-slate-600">
+                  <div className="lg:col-span-1 flex items-center gap-2 text-sm text-slate-600">
                     <CheckCircle2 className="text-emerald-500" size={16} />
                     {suggestion?.confidence ?? 0}
+                  </div>
+                  <div className="lg:col-span-1 text-xs text-slate-500">
+                    {suggestion?.rationale ? (
+                      <span>{suggestion.rationale}</span>
+                    ) : (
+                      <span className="text-slate-300">—</span>
+                    )}
                   </div>
                 </div>
               );
