@@ -60,6 +60,15 @@ export type MappingEntry = {
   transformation?: string;
 };
 
+export type SourceField = {
+  id: string;
+  table: string;
+  column: string;
+  dataType: string;
+  sourceId?: string;
+  sourceName?: string;
+};
+
 export type DataSource = {
   id: string;
   name: string;
@@ -68,6 +77,7 @@ export type DataSource = {
   tableCount: number;
   columnCount: number;
   lastSync: string;
+  fields?: SourceField[];
 };
 
 export type PersistedState = {

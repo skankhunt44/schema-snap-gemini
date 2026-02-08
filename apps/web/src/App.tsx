@@ -1,7 +1,7 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { ingestCsv, ingestDDL, ingestDB, ingestSQLite, getState, loadSampleSnapshot, saveState, suggestMappings } from './lib/api';
-import { DataSource, MappingEntry, Relationship, SchemaSnapshot, Template, TemplateField } from './types';
+import { DataSource, MappingEntry, Relationship, SchemaSnapshot, Template, TemplateField, SourceField } from './types';
 import Sidebar from './components/Sidebar';
 import Dashboard from './pages/Dashboard';
 import DataSources from './pages/DataSources';
@@ -101,17 +101,28 @@ export default function App() {
     return sql + ';';
   };
 
-  const sourceFields = React.useMemo(() => {
-    if (!snapshot) return [];
-    return snapshot.tables.flatMap(table =>
+  const buildSourceFields = (data: SchemaSnapshot, sourceId?: string, sourceName?: string): SourceField[] => {
+    return data.tables.flatMap(table =>
       table.columns.map(col => ({
         id: `${table.name}.${col.name}`,
         table: table.name,
         column: col.name,
-        dataType: col.dataType
+        dataType: col.dataType,
+        sourceId,
+        sourceName
       }))
     );
-  }, [snapshot]);
+  };
+
+  const sourceFields = React.useMemo(() => {
+    const fromSources = dataSources.flatMap(ds => ds.fields || []);
+    const fallback = snapshot ? buildSourceFields(snapshot) : [];
+    if (!fromSources.length) return fallback;
+    const merged = new Map<string, SourceField>();
+    fallback.forEach(field => merged.set(field.id, field));
+    fromSources.forEach(field => merged.set(field.id, field));
+    return Array.from(merged.values());
+  }, [snapshot, dataSources]);
 
   const heuristicSuggestionMap = React.useMemo(() => {
     const map: Record<string, { sourceId: string | null; confidence: number; rationale: string }> = {};
@@ -266,15 +277,20 @@ export default function App() {
     setSnapshot(data);
     setSelectedRel(null);
 
-    const sampleSources: DataSource[] = data.tables.map(table => ({
-      id: `sample-${table.name}`,
-      name: table.name.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
-      type: 'CSV',
-      status: 'connected',
-      tableCount: 1,
-      columnCount: table.columns.length,
-      lastSync: new Date().toLocaleString()
-    }));
+    const sampleSources: DataSource[] = data.tables.map(table => {
+      const id = `sample-${table.name}`;
+      const name = table.name.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+      return {
+        id,
+        name,
+        type: 'CSV',
+        status: 'connected',
+        tableCount: 1,
+        columnCount: table.columns.length,
+        lastSync: new Date().toLocaleString(),
+        fields: buildSourceFields({ tables: [table], relationships: [] }, id, name)
+      };
+    });
     setDataSources(sampleSources);
 
     const nextDue = new Date();
@@ -333,14 +349,16 @@ export default function App() {
   const buildDataSourceEntry = (name: string, type: string, data: SchemaSnapshot): DataSource => {
     const tableCount = data.tables.length;
     const columnCount = data.tables.reduce((acc, t) => acc + t.columns.length, 0);
+    const id = `${type}-${Date.now()}`;
     return {
-      id: `${type}-${Date.now()}`,
+      id,
       name,
       type,
       status: 'connected',
       tableCount,
       columnCount,
-      lastSync: new Date().toLocaleString()
+      lastSync: new Date().toLocaleString(),
+      fields: buildSourceFields(data, id, name)
     };
   };
 
@@ -506,6 +524,7 @@ export default function App() {
                   activeTemplateId={activeTemplateId}
                   onSelectTemplate={setActiveTemplateId}
                   templateFields={templateFields}
+                  dataSources={dataSources}
                   sourceFields={sourceFields}
                   mappingSelections={mappingSelections}
                   mappingOperations={mappingOperations}

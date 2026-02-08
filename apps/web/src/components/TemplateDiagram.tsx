@@ -6,6 +6,8 @@ type SourceField = {
   table: string;
   column: string;
   dataType: string;
+  sourceId?: string;
+  sourceName?: string;
 };
 
 type Props = {

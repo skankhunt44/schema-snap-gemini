@@ -1,14 +1,13 @@
 import React from 'react';
 import { Wand2, RefreshCw, CheckCircle2 } from 'lucide-react';
-import { Template, TemplateField } from '../types';
-
-type SourceField = { id: string; table: string; column: string; dataType: string };
+import { DataSource, SourceField, Template, TemplateField } from '../types';
 
 type Props = {
   templates: Template[];
   activeTemplateId: string | null;
   onSelectTemplate: (id: string | null) => void;
   templateFields: TemplateField[];
+  dataSources: DataSource[];
   sourceFields: SourceField[];
   mappingSelections: Record<string, string | null>;
   mappingOperations: Record<string, string>;
@@ -25,6 +24,7 @@ const SmartMapper: React.FC<Props> = ({
   activeTemplateId,
   onSelectTemplate,
   templateFields,
+  dataSources,
   sourceFields,
   mappingSelections,
   mappingOperations,
@@ -35,14 +35,19 @@ const SmartMapper: React.FC<Props> = ({
   onOperationChange,
   onApplySuggestions
 }) => {
-  const tables = Array.from(new Set(sourceFields.map(f => f.table)));
-  const [selectedTables, setSelectedTables] = React.useState<string[]>(tables);
+  const [selectedSourceIds, setSelectedSourceIds] = React.useState<string[]>([]);
 
   React.useEffect(() => {
-    if (tables.length && selectedTables.length === 0) setSelectedTables(tables);
-  }, [tables]);
+    if (dataSources.length > 0 && selectedSourceIds.length === 0) {
+      setSelectedSourceIds(dataSources.map(ds => ds.id));
+    }
+  }, [dataSources]);
 
-  const filteredSources = sourceFields.filter(f => selectedTables.includes(f.table));
+  const filteredSources = sourceFields.filter(field => {
+    if (!dataSources.length) return true;
+    if (!field.sourceId) return true;
+    return selectedSourceIds.includes(field.sourceId);
+  });
 
   const confidenceColor = (value?: number) => {
     if (value === undefined) return 'text-slate-400';
@@ -88,22 +93,22 @@ const SmartMapper: React.FC<Props> = ({
         </div>
       )}
 
-      {tables.length > 0 && (
+      {dataSources.length > 0 && (
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 mb-4">
           <div className="text-xs uppercase tracking-wide text-slate-500 mb-2">Filter sources</div>
           <div className="flex flex-wrap gap-2">
-            {tables.map(table => (
-              <label key={table} className="flex items-center gap-2 text-sm text-slate-600 bg-slate-50 border border-slate-200 px-3 py-1 rounded-lg">
+            {dataSources.map(source => (
+              <label key={source.id} className="flex items-center gap-2 text-sm text-slate-600 bg-slate-50 border border-slate-200 px-3 py-1 rounded-lg">
                 <input
                   type="checkbox"
-                  checked={selectedTables.includes(table)}
+                  checked={selectedSourceIds.includes(source.id)}
                   onChange={(e) => {
-                    setSelectedTables(prev =>
-                      e.target.checked ? [...prev, table] : prev.filter(t => t !== table)
+                    setSelectedSourceIds(prev =>
+                      e.target.checked ? [...prev, source.id] : prev.filter(id => id !== source.id)
                     );
                   }}
                 />
-                {table}
+                {source.name}
               </label>
             ))}
           </div>
@@ -142,7 +147,7 @@ const SmartMapper: React.FC<Props> = ({
                       <option value="">— Not mapped —</option>
                       {filteredSources.map((source) => (
                         <option key={source.id} value={source.id}>
-                          {source.table}.{source.column} ({source.dataType})
+                          {source.sourceName ? `${source.sourceName}: ` : ''}{source.table}.{source.column} ({source.dataType})
                         </option>
                       ))}
                     </select>
