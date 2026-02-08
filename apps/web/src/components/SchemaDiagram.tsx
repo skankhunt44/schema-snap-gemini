@@ -12,6 +12,7 @@ const FIELD_HEIGHT = 32;
 const HEADER_HEIGHT = 40;
 const BOX_WIDTH = 260;
 const GAP_X = 300; // match autoreport
+const GAP_Y = 40;
 const PADDING_Y = 20;
 const START_X = 50; // match autoreport
 const START_Y = 50; // match autoreport
