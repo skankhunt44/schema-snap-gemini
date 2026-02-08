@@ -11,6 +11,8 @@ type Props = {
 };
 
 const Relationships: React.FC<Props> = ({ snapshot, selectedRel, onSelectRel, onExportJson, onExportSql }) => {
+  const [minConfidence, setMinConfidence] = React.useState(0.6);
+
   return (
     <div className="p-6">
       <div className="mb-6">
@@ -19,16 +21,35 @@ const Relationships: React.FC<Props> = ({ snapshot, selectedRel, onSelectRel, on
       </div>
 
       <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm mb-6">
-        <div className="flex flex-col md:flex-row gap-3 mb-4">
-          <button onClick={onExportJson} className="bg-slate-900 text-white rounded-lg py-2 px-4 hover:bg-slate-800">
-            Export JSON Snapshot
-          </button>
-          <button onClick={onExportSql} className="bg-indigo-600 text-white rounded-lg py-2 px-4 hover:bg-indigo-700">
-            Export SQL Join Plan
-          </button>
+        <div className="flex flex-col md:flex-row gap-3 mb-4 items-center justify-between">
+          <div className="flex flex-col md:flex-row gap-3">
+            <button onClick={onExportJson} className="bg-slate-900 text-white rounded-lg py-2 px-4 hover:bg-slate-800">
+              Export JSON Snapshot
+            </button>
+            <button onClick={onExportSql} className="bg-indigo-600 text-white rounded-lg py-2 px-4 hover:bg-indigo-700">
+              Export SQL Join Plan
+            </button>
+          </div>
+          <div className="flex items-center gap-2 text-sm text-slate-500">
+            <span>Min confidence</span>
+            <select
+              value={minConfidence}
+              onChange={(e) => setMinConfidence(Number(e.target.value))}
+              className="border border-slate-200 rounded-lg px-3 py-2"
+            >
+              <option value={0}>Show all</option>
+              <option value={0.6}>≥ 0.60</option>
+              <option value={0.8}>≥ 0.80</option>
+            </select>
+          </div>
         </div>
         {snapshot ? (
-          <GraphView tables={snapshot.tables} relationships={snapshot.relationships} onEdgeSelect={onSelectRel} />
+          <GraphView
+            tables={snapshot.tables}
+            relationships={snapshot.relationships}
+            minConfidence={minConfidence}
+            onEdgeSelect={onSelectRel}
+          />
         ) : (
           <p className="text-sm text-slate-500">Upload data sources to view relationships.</p>
         )}
