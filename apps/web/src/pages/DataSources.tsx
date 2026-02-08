@@ -43,6 +43,7 @@ const DataSources: React.FC<Props> = ({
   const [files, setFiles] = useState<File[]>([]);
   const [sqliteFile, setSqliteFile] = useState<File | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  const [dragActive, setDragActive] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const sqliteInputRef = useRef<HTMLInputElement>(null);
@@ -180,14 +181,34 @@ const DataSources: React.FC<Props> = ({
                   <div className="flex items-center gap-3 mb-2 text-slate-600">
                     <FileSpreadsheet size={18} /> Upload CSV or Excel files
                   </div>
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept=".csv,.xlsx,.xls"
-                    multiple
-                    onChange={(e) => setFiles(Array.from(e.target.files || []))}
-                    className="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"
-                  />
+                  <div
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      setDragActive(true);
+                    }}
+                    onDragLeave={() => setDragActive(false)}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      setDragActive(false);
+                      const dropped = Array.from(e.dataTransfer.files || []).filter(file =>
+                        /\.(csv|xlsx|xls)$/i.test(file.name)
+                      );
+                      if (dropped.length) setFiles(dropped);
+                    }}
+                    className={`border-2 border-dashed rounded-xl p-4 text-center text-sm ${
+                      dragActive ? 'border-indigo-500 bg-indigo-50' : 'border-slate-200 bg-white'
+                    }`}
+                  >
+                    <p className="text-slate-500">Drag & drop CSV/XLSX here or click to browse</p>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept=".csv,.xlsx,.xls"
+                      multiple
+                      onChange={(e) => setFiles(Array.from(e.target.files || []))}
+                      className="mt-3 block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"
+                    />
+                  </div>
                   <button
                     onClick={handleCsvSubmit}
                     disabled={!files.length || loading}
