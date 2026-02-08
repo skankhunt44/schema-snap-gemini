@@ -1,6 +1,6 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { ingestCsv, ingestDDL, ingestDB, ingestSQLite, suggestMappings } from './lib/api';
+import { ingestCsv, ingestDDL, ingestDB, ingestSQLite, loadSampleSnapshot, suggestMappings } from './lib/api';
 import { DataSource, Relationship, SchemaSnapshot, Template, TemplateField } from './types';
 import Sidebar from './components/Sidebar';
 import Dashboard from './pages/Dashboard';
@@ -221,6 +221,43 @@ export default function App() {
     });
   };
 
+  const loadSampleData = async () => {
+    const data = await loadSampleSnapshot();
+    setSnapshot(data);
+    setSelectedRel(null);
+
+    const sampleSources: DataSource[] = data.tables.map(table => ({
+      id: `sample-${table.name}`,
+      name: table.name.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
+      type: 'CSV',
+      status: 'connected',
+      tableCount: 1,
+      columnCount: table.columns.length,
+      lastSync: new Date().toLocaleString()
+    }));
+    setDataSources(sampleSources);
+
+    const sampleTemplate: Template = {
+      id: 'tpl_sample',
+      name: 'Donor Impact Summary',
+      stakeholder: 'Board & Major Donors',
+      frequency: 'Monthly',
+      fields: [
+        { id: 'tf_donor_name', name: 'Donor Name', description: 'Primary donor name', required: true },
+        { id: 'tf_donor_email', name: 'Donor Email', description: 'Primary email', required: true },
+        { id: 'tf_donation_date', name: 'Donation Date', description: 'Date of donation', required: true },
+        { id: 'tf_donation_amount', name: 'Donation Amount', description: 'Amount contributed', required: true },
+        { id: 'tf_total_donations', name: 'Total Donations', description: 'Total per donor', required: false },
+        { id: 'tf_program_name', name: 'Program Name', description: 'Program funded', required: true },
+        { id: 'tf_program_location', name: 'Program Location', description: 'Location of program', required: false }
+      ]
+    };
+
+    setTemplates([sampleTemplate]);
+    setActiveTemplateId(sampleTemplate.id);
+    setMappingByTemplate({});
+  };
+
   const updateTemplate = (templateId: string, update: Partial<Template>) => {
     setTemplates(prev => prev.map(t => (t.id === templateId ? { ...t, ...update } : t)));
   };
@@ -281,6 +318,13 @@ export default function App() {
     0
   );
 
+  React.useEffect(() => {
+    if (dataSources.length || templates.length) return;
+    const seeded = localStorage.getItem('schemaSnapSeeded');
+    if (seeded) return;
+    loadSampleData().finally(() => localStorage.setItem('schemaSnapSeeded', 'true'));
+  }, []);
+
   return (
     <Router>
       <div className="flex min-h-screen bg-slate-50">
@@ -296,6 +340,7 @@ export default function App() {
                   dataSources={dataSources}
                   mappedCount={mappedCount}
                   totalMapped={totalMapped}
+                  onLoadSample={loadSampleData}
                 />
               }
             />

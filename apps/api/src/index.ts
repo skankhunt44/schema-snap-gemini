@@ -15,6 +15,7 @@ import { ingestDDL } from './ingest/ddl';
 import { ingestMySQL, ingestPostgres, ingestSQLite } from './ingest/db';
 import { inferRelationships } from './infer';
 import { suggestMappingsGemini } from './map/suggest';
+import { loadSampleTables } from './samples';
 import { SchemaSnapshot, TableSchema } from './types/schema';
 
 const app = express();
@@ -106,6 +107,17 @@ app.post('/api/mappings/suggest', async (req, res) => {
     res.json({ mappings });
   } catch (err: any) {
     res.status(500).json({ error: err.message || 'AI mapping failed' });
+  }
+});
+
+app.get('/api/samples', async (_req, res) => {
+  try {
+    const tables = loadSampleTables();
+    const relationships = await inferRelationships(tables, process.env.GEMINI_API_KEY);
+    const snapshot: SchemaSnapshot = { tables, relationships };
+    res.json(snapshot);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Failed to load samples' });
   }
 });
 

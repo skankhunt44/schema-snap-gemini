@@ -54,3 +54,9 @@ export const suggestMappings = async (sourceFields: SourceField[], templateField
 
   return res.json() as Promise<{ mappings: Array<{ templateFieldId: string; sourceFieldId: string | null; confidence: number; rationale: string }> }>;
 };
+
+export const loadSampleSnapshot = async (): Promise<SchemaSnapshot> => {
+  const res = await fetch('/api/samples');
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+};

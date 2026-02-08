@@ -28,7 +28,8 @@ const Dashboard: React.FC<{
   dataSources: DataSource[];
   mappedCount: number;
   totalMapped: number;
-}> = ({ snapshot, templates, dataSources, mappedCount, totalMapped }) => {
+  onLoadSample: () => void;
+}> = ({ snapshot, templates, dataSources, mappedCount, totalMapped, onLoadSample }) => {
   const tableCount = snapshot?.tables.length ?? 0;
   const columnCount = snapshot?.tables.reduce((acc, t) => acc + t.columns.length, 0) ?? 0;
   const relationships = snapshot?.relationships.length ?? 0;
@@ -76,7 +77,15 @@ const Dashboard: React.FC<{
         <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
           <h3 className="font-semibold text-slate-900 mb-2">Connect data</h3>
           <p className="text-sm text-slate-500 mb-4">Upload CSVs, paste DDL, or connect a local DB.</p>
-          <Link className="text-indigo-600 font-medium" to="/connect">Go to Data Sources →</Link>
+          <div className="flex flex-col gap-2">
+            <Link className="text-indigo-600 font-medium" to="/connect">Go to Data Sources →</Link>
+            <button
+              onClick={onLoadSample}
+              className="text-sm px-3 py-2 bg-indigo-50 text-indigo-700 rounded-lg hover:bg-indigo-100"
+            >
+              Load sample nonprofit data
+            </button>
+          </div>
         </div>
         <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
           <h3 className="font-semibold text-slate-900 mb-2">Map templates</h3>
