@@ -31,7 +31,7 @@ app.post('/api/ingest/csv', upload.array('files'), async (req, res) => {
     const files = req.files as Express.Multer.File[];
     if (!files?.length) return res.status(400).json({ error: 'No CSV files uploaded.' });
 
-    const tables: TableSchema[] = files.map(file => ingestCsvBuffer(file.buffer, file.originalname.replace(/\.csv$/i, '')));
+    const tables: TableSchema[] = files.map(file => ingestCsvBuffer(file.buffer, file.originalname));
     const relationships = await inferRelationships(tables, process.env.GEMINI_API_KEY);
 
     const snapshot: SchemaSnapshot = { tables, relationships };

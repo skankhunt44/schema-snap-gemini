@@ -64,7 +64,7 @@ const DataSources: React.FC<Props> = ({
 
   const handleCsvSubmit = async () => {
     if (!files.length) return;
-    const sourceName = name || files[0].name.replace(/\.csv$/i, '');
+    const sourceName = name || files[0].name.replace(/\.(csv|xlsx|xls)$/i, '');
     const ok = await onCsvIngest(sourceName, files);
     if (ok) handleClose();
   };
@@ -157,7 +157,7 @@ const DataSources: React.FC<Props> = ({
 
             <div className="p-6 space-y-4">
               <div className="flex flex-wrap gap-2">
-                {tabButton('csv', 'CSV Upload')}
+                {tabButton('csv', 'CSV / Excel')}
                 {tabButton('db', 'Database')}
                 {tabButton('ddl', 'SQL DDL')}
                 {tabButton('sqlite', 'SQLite File')}
@@ -178,12 +178,12 @@ const DataSources: React.FC<Props> = ({
               {activeTab === 'csv' && (
                 <div className="bg-slate-50 border border-dashed border-slate-200 rounded-xl p-4">
                   <div className="flex items-center gap-3 mb-2 text-slate-600">
-                    <FileSpreadsheet size={18} /> Upload one or more CSV files
+                    <FileSpreadsheet size={18} /> Upload CSV or Excel files
                   </div>
                   <input
                     ref={fileInputRef}
                     type="file"
-                    accept=".csv"
+                    accept=".csv,.xlsx,.xls"
                     multiple
                     onChange={(e) => setFiles(Array.from(e.target.files || []))}
                     className="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"
@@ -193,7 +193,7 @@ const DataSources: React.FC<Props> = ({
                     disabled={!files.length || loading}
                     className="mt-3 w-full bg-indigo-600 text-white rounded-lg py-2 hover:bg-indigo-700 disabled:opacity-50"
                   >
-                    {loading ? 'Analyzing…' : 'Connect CSVs'}
+                    {loading ? 'Analyzing…' : 'Connect Files'}
                   </button>
                 </div>
               )}
