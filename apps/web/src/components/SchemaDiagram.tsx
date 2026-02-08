@@ -28,14 +28,50 @@ export default function SchemaDiagram({ tables, relationships, minConfidence, on
     const tablePositions: Record<string, { x: number; y: number; height: number }> = {};
     const fieldPositions: Record<string, Record<string, { x: number; y: number }>> = {};
 
-    // Autoreport-style left-to-right single row
-    const cols = tables.length || 1;
-    const startY = START_Y;
+    const heights = new Map<string, number>();
+    tables.forEach(t => {
+      heights.set(t.name, HEADER_HEIGHT + t.columns.length * FIELD_HEIGHT + PADDING_Y);
+    });
 
-    tables.forEach((table, colIdx) => {
-      const x = START_X + colIdx * GAP_X;
-      const y = startY;
-      const height = HEADER_HEIGHT + table.columns.length * FIELD_HEIGHT + PADDING_Y;
+    // Degree-based layout: center most-connected table, others fan left/right
+    const degree: Record<string, number> = {};
+    tables.forEach(t => (degree[t.name] = 0));
+    relationships.forEach(r => {
+      degree[r.from.table] = (degree[r.from.table] || 0) + 1;
+      degree[r.to.table] = (degree[r.to.table] || 0) + 1;
+    });
+
+    const sorted = [...tables].sort((a, b) => (degree[b.name] || 0) - (degree[a.name] || 0));
+    const center = sorted[0];
+
+    const columnX = [
+      START_X + GAP_X, // left
+      START_X + GAP_X * 3, // right
+      START_X, // far left
+      START_X + GAP_X * 4 // far right
+    ];
+
+    const columnY = columnX.map(() => START_Y);
+
+    if (center) {
+      const centerX = START_X + GAP_X * 2;
+      const centerY = START_Y + 60;
+      tablePositions[center.name] = { x: centerX, y: centerY, height: heights.get(center.name)! };
+
+      const fields: Record<string, { x: number; y: number }> = {};
+      center.columns.forEach((col, i) => {
+        const fieldY = centerY + HEADER_HEIGHT + i * FIELD_HEIGHT + FIELD_HEIGHT / 2;
+        fields[col.name] = { x: centerX + BOX_WIDTH, y: fieldY };
+      });
+      fieldPositions[center.name] = fields;
+    }
+
+    const remaining = sorted.slice(1);
+    remaining.forEach((table, idx) => {
+      const colIdx = idx % columnX.length;
+      const x = columnX[colIdx];
+      const y = columnY[colIdx];
+      const height = heights.get(table.name)!;
       tablePositions[table.name] = { x, y, height };
 
       const fields: Record<string, { x: number; y: number }> = {};
@@ -44,14 +80,15 @@ export default function SchemaDiagram({ tables, relationships, minConfidence, on
         fields[col.name] = { x: x + BOX_WIDTH, y: fieldY };
       });
       fieldPositions[table.name] = fields;
+
+      columnY[colIdx] += height + GAP_Y;
     });
 
-    const width = CANVAS_WIDTH;
-    const maxHeight = Math.max(...tables.map(t => HEADER_HEIGHT + t.columns.length * FIELD_HEIGHT + PADDING_Y), 200);
-    const height = Math.max(startY + maxHeight + 100, 400);
+    const width = START_X + GAP_X * 5 + BOX_WIDTH;
+    const height = Math.max(...columnY, START_Y + 200) + 100;
 
     return { tablePositions, fieldPositions, width, height };
-  }, [tables]);
+  }, [tables, relationships]);
 
   const filteredRels = relationships.filter(r => r.confidence >= minConfidence);
 
