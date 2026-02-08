@@ -1,5 +1,5 @@
 import React from 'react';
-import GraphView from '../components/GraphView';
+import SchemaDiagram from '../components/SchemaDiagram';
 import { Relationship, SchemaSnapshot } from '../types';
 
 type Props = {
@@ -44,7 +44,7 @@ const Relationships: React.FC<Props> = ({ snapshot, selectedRel, onSelectRel, on
           </div>
         </div>
         {snapshot ? (
-          <GraphView
+          <SchemaDiagram
             tables={snapshot.tables}
             relationships={snapshot.relationships}
             minConfidence={minConfidence}
