@@ -52,7 +52,7 @@ export const suggestMappings = async (sourceFields: SourceField[], templateField
     throw new Error(text);
   }
 
-  return res.json() as Promise<{ mappings: Array<{ templateFieldId: string; sourceFieldId: string | null; confidence: number; rationale: string }> }>;
+  return res.json() as Promise<{ mappings: Array<{ templateFieldId: string; sourceFieldId: string | null; confidence: number; rationale: string; operation?: string }> }>;
 };
 
 export const loadSampleSnapshot = async (): Promise<SchemaSnapshot> => {

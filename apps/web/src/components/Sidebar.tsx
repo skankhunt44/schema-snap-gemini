@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, Database, FileText, Wand2, Share2, BarChart3, Settings as SettingsIcon, Menu, X } from 'lucide-react';
+import { LayoutDashboard, Database, FileText, Wand2, Share2, BarChart3, Clock, Settings as SettingsIcon, Menu, X } from 'lucide-react';
 
 const Sidebar: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
@@ -11,6 +11,7 @@ const Sidebar: React.FC = () => {
     { to: '/templates', icon: <FileText size={20} />, label: 'Templates' },
     { to: '/map', icon: <Wand2 size={20} />, label: 'Smart Mapper' },
     { to: '/relationships', icon: <Share2 size={20} />, label: 'Relationships' },
+    { to: '/schedule', icon: <Clock size={20} />, label: 'Schedule' },
     { to: '/analytics', icon: <BarChart3 size={20} />, label: 'Analytics' }
   ];
 

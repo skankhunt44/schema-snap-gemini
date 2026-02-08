@@ -1,7 +1,7 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { ingestCsv, ingestDDL, ingestDB, ingestSQLite, getState, loadSampleSnapshot, saveState, suggestMappings } from './lib/api';
-import { DataSource, Relationship, SchemaSnapshot, Template, TemplateField } from './types';
+import { DataSource, MappingEntry, Relationship, SchemaSnapshot, Template, TemplateField } from './types';
 import Sidebar from './components/Sidebar';
 import Dashboard from './pages/Dashboard';
 import DataSources from './pages/DataSources';
@@ -9,6 +9,7 @@ import Templates from './pages/Templates';
 import SmartMapper from './pages/SmartMapper';
 import Relationships from './pages/Relationships';
 import Analytics from './pages/Analytics';
+import Schedule from './pages/Schedule';
 import Settings from './pages/Settings';
 
 export default function App() {
@@ -16,7 +17,7 @@ export default function App() {
   const [dataSources, setDataSources] = React.useState<DataSource[]>([]);
   const [templates, setTemplates] = React.useState<Template[]>([]);
   const [activeTemplateId, setActiveTemplateId] = React.useState<string | null>(null);
-  const [mappingByTemplate, setMappingByTemplate] = React.useState<Record<string, Record<string, string | null>>>({});
+  const [mappingByTemplate, setMappingByTemplate] = React.useState<Record<string, Record<string, MappingEntry>>>({});
 
   const [error, setError] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(false);
@@ -133,7 +134,14 @@ export default function App() {
     return map;
   }, [templateFields, sourceFields, snapshot]);
 
-  const mappingSelections = activeTemplateId ? mappingByTemplate[activeTemplateId] || {} : {};
+  const mappingEntries = activeTemplateId ? mappingByTemplate[activeTemplateId] || {} : {};
+  const mappingSelections = Object.fromEntries(
+    Object.entries(mappingEntries).map(([key, value]) => [key, value.sourceFieldId ?? null])
+  ) as Record<string, string | null>;
+  const mappingOperations = Object.fromEntries(
+    Object.entries(mappingEntries).map(([key, value]) => [key, value.operation || 'DIRECT'])
+  ) as Record<string, string>;
+
   const suggestionMap = activeTemplateId && aiSuggestionsByTemplate[activeTemplateId]
     ? aiSuggestionsByTemplate[activeTemplateId]
     : heuristicSuggestionMap;
@@ -142,23 +150,28 @@ export default function App() {
     if (!activeTemplateId) return;
     setMappingByTemplate(prev => {
       const current = prev[activeTemplateId] || {};
-      const next: Record<string, string | null> = { ...current };
+      const next: Record<string, MappingEntry> = { ...current };
       templateFields.forEach(field => {
         if (next[field.id] === undefined) {
-          next[field.id] = suggestionMap[field.id]?.sourceId ?? null;
+          next[field.id] = {
+            sourceFieldId: suggestionMap[field.id]?.sourceId ?? null,
+            operation: 'DIRECT',
+            confidence: suggestionMap[field.id]?.confidence,
+            rationale: suggestionMap[field.id]?.rationale
+          };
         }
       });
       return { ...prev, [activeTemplateId]: next };
     });
   }, [activeTemplateId, templateFields, suggestionMap]);
 
-  const applySuggestions = async () => {
+  const applySuggestions = async (sources = sourceFields) => {
     if (!activeTemplateId) return;
     setAiLoading(true);
     setAiError(null);
 
     try {
-      const payloadSourceFields = sourceFields.map(field => ({
+      const payloadSourceFields = sources.map(field => ({
         id: field.id,
         name: field.column,
         description: field.table,
@@ -171,20 +184,26 @@ export default function App() {
       }));
 
       const result = await suggestMappings(payloadSourceFields, payloadTemplateFields);
-      const map: Record<string, { sourceId: string | null; confidence: number; rationale: string }> = {};
+      const map: Record<string, { sourceId: string | null; confidence: number; rationale: string; operation?: string }> = {};
       result.mappings.forEach(mapping => {
         map[mapping.templateFieldId] = {
           sourceId: mapping.sourceFieldId ?? null,
           confidence: mapping.confidence ?? 0,
-          rationale: mapping.rationale || ''
+          rationale: mapping.rationale || '',
+          operation: mapping.operation
         };
       });
 
       setAiSuggestionsByTemplate(prev => ({ ...prev, [activeTemplateId]: map }));
       setMappingByTemplate(prev => {
-        const next: Record<string, string | null> = {};
+        const next: Record<string, MappingEntry> = {};
         templateFields.forEach(field => {
-          next[field.id] = map[field.id]?.sourceId ?? null;
+          next[field.id] = {
+            sourceFieldId: map[field.id]?.sourceId ?? null,
+            operation: map[field.id]?.operation ?? 'DIRECT',
+            confidence: map[field.id]?.confidence ?? 0,
+            rationale: map[field.id]?.rationale ?? ''
+          };
         });
         return { ...prev, [activeTemplateId]: next };
       });
@@ -209,10 +228,29 @@ export default function App() {
         description: field.description,
         sourceField: mappingSelections[field.id],
         confidence: suggestionMap[field.id]?.confidence ?? null,
-        rationale: suggestionMap[field.id]?.rationale ?? null
+        rationale: suggestionMap[field.id]?.rationale ?? null,
+        operation: mappingOperations[field.id] || 'DIRECT'
       }))
     };
     downloadTextFile('template-mapping.json', JSON.stringify(payload, null, 2));
+  };
+
+  const downloadSnapshot = () => {
+    if (!snapshot) return;
+    downloadTextFile('schema-snap.json', JSON.stringify(snapshot, null, 2));
+  };
+
+  const downloadTemplates = () => {
+    downloadTextFile('templates.json', JSON.stringify(templates, null, 2));
+  };
+
+  const downloadMappings = () => {
+    downloadTextFile('mappings.json', JSON.stringify(mappingByTemplate, null, 2));
+  };
+
+  const downloadJoinPlan = () => {
+    if (!snapshot) return;
+    downloadTextFile('join-plan.sql', buildJoinPlan(snapshot));
   };
 
   const addTemplate = (template: Template) => {
@@ -239,11 +277,16 @@ export default function App() {
     }));
     setDataSources(sampleSources);
 
+    const nextDue = new Date();
+    nextDue.setDate(nextDue.getDate() + 14);
+
     const sampleTemplate: Template = {
       id: 'tpl_sample',
       name: 'Donor Impact Summary',
       stakeholder: 'Board & Major Donors',
       frequency: 'Monthly',
+      nextDueDate: nextDue.toISOString().split('T')[0],
+      reminderDays: [7, 3, 1],
       fields: [
         { id: 'tf_donor_name', name: 'Donor Name', description: 'Primary donor name', required: true },
         { id: 'tf_donor_email', name: 'Donor Email', description: 'Primary email', required: true },
@@ -258,6 +301,11 @@ export default function App() {
     setTemplates([sampleTemplate]);
     setActiveTemplateId(sampleTemplate.id);
     setMappingByTemplate({});
+  };
+
+  const requestNotifications = async () => {
+    if (!('Notification' in window)) return;
+    await Notification.requestPermission();
   };
 
   const updateTemplate = (templateId: string, update: Partial<Template>) => {
@@ -279,7 +327,7 @@ export default function App() {
 
   const mappedCountForTemplate = (templateId: string) => {
     const mapping = mappingByTemplate[templateId] || {};
-    return Object.values(mapping).filter(Boolean).length;
+    return Object.values(mapping).filter(entry => entry?.sourceFieldId).length;
   };
 
   const buildDataSourceEntry = (name: string, type: string, data: SchemaSnapshot): DataSource => {
@@ -316,7 +364,7 @@ export default function App() {
   const mappedCount = activeTemplateId ? mappedCountForTemplate(activeTemplateId) : 0;
 
   const totalMapped = Object.values(mappingByTemplate).reduce(
-    (acc, mapping) => acc + Object.values(mapping).filter(Boolean).length,
+    (acc, mapping) => acc + Object.values(mapping).filter(entry => entry?.sourceFieldId).length,
     0
   );
 
@@ -336,6 +384,37 @@ export default function App() {
   }, [hydrated, snapshot, dataSources, templates, activeTemplateId, mappingByTemplate]);
 
   React.useEffect(() => {
+    if (!('Notification' in window)) return;
+    if (Notification.permission !== 'granted') return;
+
+    const interval = setInterval(() => {
+      const today = new Date();
+      const todayKey = today.toISOString().slice(0, 10);
+      const store = JSON.parse(localStorage.getItem('schemaSnapNotified') || '{}');
+
+      templates.forEach(template => {
+        if (!template.nextDueDate) return;
+        const due = new Date(template.nextDueDate);
+        const diffDays = Math.ceil((due.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+        const reminders = template.reminderDays || [];
+
+        if (reminders.includes(diffDays)) {
+          const key = `${template.id}:${diffDays}`;
+          if (store[key] === todayKey) return;
+          new Notification(`Reminder: ${template.name} due in ${diffDays} day${diffDays > 1 ? 's' : ''}`, {
+            body: `Stakeholder: ${template.stakeholder}`
+          });
+          store[key] = todayKey;
+        }
+      });
+
+      localStorage.setItem('schemaSnapNotified', JSON.stringify(store));
+    }, 60000);
+
+    return () => clearInterval(interval);
+  }, [templates]);
+
+  React.useEffect(() => {
     const init = async () => {
       try {
         const state = await getState();
@@ -344,7 +423,19 @@ export default function App() {
           setDataSources(state.dataSources || []);
           setTemplates(state.templates || []);
           setActiveTemplateId(state.activeTemplateId || null);
-          setMappingByTemplate(state.mappingByTemplate || {});
+          const normalized: Record<string, Record<string, MappingEntry>> = {};
+          Object.entries(state.mappingByTemplate || {}).forEach(([tplId, mapping]) => {
+            const record: Record<string, MappingEntry> = {};
+            Object.entries(mapping as any).forEach(([fieldId, value]) => {
+              if (value && typeof value === 'object') {
+                record[fieldId] = value as MappingEntry;
+              } else {
+                record[fieldId] = { sourceFieldId: value as string | null, operation: 'DIRECT' };
+              }
+            });
+            normalized[tplId] = record;
+          });
+          setMappingByTemplate(normalized);
         } else {
           await loadSampleData();
         }
@@ -417,6 +508,7 @@ export default function App() {
                   templateFields={templateFields}
                   sourceFields={sourceFields}
                   mappingSelections={mappingSelections}
+                  mappingOperations={mappingOperations}
                   suggestionMap={suggestionMap}
                   aiLoading={aiLoading}
                   aiError={aiError}
@@ -426,7 +518,23 @@ export default function App() {
                       ...prev,
                       [activeTemplateId]: {
                         ...prev[activeTemplateId],
-                        [fieldId]: sourceId
+                        [fieldId]: {
+                          ...(prev[activeTemplateId]?.[fieldId] || { operation: 'DIRECT' }),
+                          sourceFieldId: sourceId
+                        }
+                      }
+                    }));
+                  }}
+                  onOperationChange={(fieldId, operation) => {
+                    if (!activeTemplateId) return;
+                    setMappingByTemplate(prev => ({
+                      ...prev,
+                      [activeTemplateId]: {
+                        ...prev[activeTemplateId],
+                        [fieldId]: {
+                          ...(prev[activeTemplateId]?.[fieldId] || { sourceFieldId: null }),
+                          operation
+                        }
                       }
                     }));
                   }}
@@ -449,6 +557,10 @@ export default function App() {
               }
             />
             <Route
+              path="/schedule"
+              element={<Schedule templates={templates} onRequestNotifications={requestNotifications} />}
+            />
+            <Route
               path="/analytics"
               element={
                 <Analytics
@@ -456,6 +568,10 @@ export default function App() {
                   templates={templates}
                   snapshot={snapshot}
                   totalMapped={totalMapped}
+                  onDownloadSnapshot={downloadSnapshot}
+                  onDownloadTemplates={downloadTemplates}
+                  onDownloadMappings={downloadMappings}
+                  onDownloadJoinPlan={downloadJoinPlan}
                 />
               }
             />

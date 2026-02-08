@@ -8,7 +8,8 @@ const emptyField = (): TemplateField => ({
   id: `tf_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
   name: '',
   description: '',
-  required: true
+  required: true,
+  validationRule: ''
 });
 
 type Props = {
@@ -37,6 +38,8 @@ const Templates: React.FC<Props> = ({
   const [name, setName] = useState('');
   const [stakeholder, setStakeholder] = useState('');
   const [frequency, setFrequency] = useState('Monthly');
+  const [nextDueDate, setNextDueDate] = useState('');
+  const [reminderDays, setReminderDays] = useState<number[]>([7, 3, 1]);
   const [fields, setFields] = useState<TemplateField[]>([emptyField()]);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [dragActive, setDragActive] = useState(false);
@@ -51,6 +54,8 @@ const Templates: React.FC<Props> = ({
     setName(template.name);
     setStakeholder(template.stakeholder);
     setFrequency(template.frequency);
+    setNextDueDate(template.nextDueDate || '');
+    setReminderDays(template.reminderDays || [7, 3, 1]);
     setFields(template.fields.length ? template.fields : [emptyField()]);
   }, [editingId, isModalOpen, templates]);
 
@@ -58,6 +63,8 @@ const Templates: React.FC<Props> = ({
     setName('');
     setStakeholder('');
     setFrequency('Monthly');
+    setNextDueDate('');
+    setReminderDays([7, 3, 1]);
     setFields([emptyField()]);
     setEditingId(null);
   };
@@ -78,13 +85,15 @@ const Templates: React.FC<Props> = ({
     if (!cleanFields.length) return;
 
     if (editingId) {
-      onUpdateTemplate(editingId, { name, stakeholder, frequency, fields: cleanFields });
+      onUpdateTemplate(editingId, { name, stakeholder, frequency, nextDueDate, reminderDays, fields: cleanFields });
     } else {
       onCreateTemplate({
         id: `tpl_${Date.now()}`,
         name,
         stakeholder,
         frequency,
+        nextDueDate,
+        reminderDays,
         fields: cleanFields
       });
     }
@@ -106,6 +115,7 @@ const Templates: React.FC<Props> = ({
       if (!data) return;
 
       let headers: string[] = [];
+      let rows: string[][] = [];
 
       if (file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) {
         const workbook = XLSX.read(data, { type: 'array' });
@@ -114,17 +124,52 @@ const Templates: React.FC<Props> = ({
         const jsonData = XLSX.utils.sheet_to_json<any[]>(worksheet, { header: 1 });
         if (jsonData.length > 0) {
           headers = (jsonData[0] as any[]).map(h => String(h ?? '').trim()).filter(Boolean);
+          rows = (jsonData as any[]).slice(1).map(row => row.map(cell => String(cell ?? '').trim()));
         }
       } else {
         const text = new TextDecoder().decode(data as ArrayBuffer);
-        const [headerLine] = text.split(/\r?\n/);
-        headers = headerLine
-          .split(',')
-          .map(h => h.replace(/"/g, '').trim())
-          .filter(Boolean);
+        const lines = text.split(/\r?\n/).filter(line => line.trim() !== '');
+        if (lines.length) {
+          headers = lines[0].split(',').map(h => h.replace(/"/g, '').trim()).filter(Boolean);
+          rows = lines.slice(1).map(line => line.split(',').map(col => col.replace(/"/g, '').trim()));
+        }
       }
 
-      if (headers.length) {
+      if (!headers.length) return;
+
+      const lowerHeaders = headers.map(h => h.toLowerCase());
+      const isDefinitionFile =
+        lowerHeaders.some(h => h.includes('field name')) ||
+        (lowerHeaders.includes('name') && lowerHeaders.includes('description')) ||
+        lowerHeaders.includes('required') ||
+        lowerHeaders.includes('rule');
+
+      if (isDefinitionFile) {
+        const nameIdx = lowerHeaders.findIndex(h => h.includes('field name') || h === 'name');
+        const descIdx = lowerHeaders.findIndex(h => h.includes('desc'));
+        const reqIdx = lowerHeaders.findIndex(h => h.includes('req'));
+        const ruleIdx = lowerHeaders.findIndex(h => h.includes('rule') || h.includes('valid'));
+
+        const newFields = rows.map((cols, idx) => {
+          const nameVal = cols[nameIdx] || `Field ${idx + 1}`;
+          const descVal = descIdx >= 0 ? cols[descIdx] : '';
+          let required = true;
+          if (reqIdx >= 0 && cols[reqIdx]) {
+            const val = cols[reqIdx].toLowerCase();
+            required = !(val === 'false' || val === 'no' || val === '0');
+          }
+          const validationRule = ruleIdx >= 0 ? cols[ruleIdx] : '';
+          return {
+            id: `tf_${Date.now()}_${idx}`,
+            name: nameVal,
+            description: descVal,
+            required,
+            validationRule
+          } as TemplateField;
+        });
+
+        setFields(newFields.filter(f => f.name));
+      } else {
         setFields(headers.map(h => ({ id: `tf_${Date.now()}_${h}`, name: h, description: '', required: true })));
       }
     };
@@ -238,7 +283,35 @@ const Templates: React.FC<Props> = ({
                   </select>
                 </div>
                 <div>
-                  <label className="text-xs uppercase tracking-wide text-slate-500">Import CSV/Excel (headers)</label>
+                  <label className="text-xs uppercase tracking-wide text-slate-500">Next Due Date</label>
+                  <input
+                    type="date"
+                    className="w-full border border-slate-200 rounded-lg px-3 py-2 mt-1"
+                    value={nextDueDate}
+                    onChange={(e) => setNextDueDate(e.target.value)}
+                  />
+                </div>
+                <div className="md:col-span-2">
+                  <label className="text-xs uppercase tracking-wide text-slate-500">Reminders (days before)</label>
+                  <div className="flex flex-wrap gap-2 mt-2">
+                    {[1, 3, 7, 14].map(day => (
+                      <label key={day} className="flex items-center gap-2 text-sm text-slate-600 bg-slate-50 border border-slate-200 px-3 py-1 rounded-lg">
+                        <input
+                          type="checkbox"
+                          checked={reminderDays.includes(day)}
+                          onChange={(e) => {
+                            setReminderDays(prev =>
+                              e.target.checked ? [...prev, day] : prev.filter(d => d !== day)
+                            );
+                          }}
+                        />
+                        {day} day{day > 1 ? 's' : ''}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+                <div className="md:col-span-2">
+                  <label className="text-xs uppercase tracking-wide text-slate-500">Import CSV/Excel (headers or definition list)</label>
                   <div
                     onDragOver={(e) => {
                       e.preventDefault();
@@ -283,7 +356,7 @@ const Templates: React.FC<Props> = ({
 
                 {fields.map((field, idx) => (
                   <div key={field.id} className="grid grid-cols-1 md:grid-cols-12 gap-3 bg-slate-50 p-3 rounded-xl">
-                    <div className="md:col-span-4">
+                    <div className="md:col-span-3">
                       <input
                         className="w-full border border-slate-200 rounded-lg px-3 py-2"
                         placeholder="Field name"
@@ -291,7 +364,7 @@ const Templates: React.FC<Props> = ({
                         onChange={(e) => updateField(idx, 'name', e.target.value)}
                       />
                     </div>
-                    <div className="md:col-span-5">
+                    <div className="md:col-span-4">
                       <input
                         className="w-full border border-slate-200 rounded-lg px-3 py-2"
                         placeholder="Description"
@@ -299,7 +372,15 @@ const Templates: React.FC<Props> = ({
                         onChange={(e) => updateField(idx, 'description', e.target.value)}
                       />
                     </div>
-                    <div className="md:col-span-2 flex items-center gap-2">
+                    <div className="md:col-span-3">
+                      <input
+                        className="w-full border border-slate-200 rounded-lg px-3 py-2"
+                        placeholder="Validation rule (optional)"
+                        value={field.validationRule || ''}
+                        onChange={(e) => updateField(idx, 'validationRule', e.target.value)}
+                      />
+                    </div>
+                    <div className="md:col-span-1 flex items-center gap-2">
                       <input
                         type="checkbox"
                         checked={field.required ?? true}

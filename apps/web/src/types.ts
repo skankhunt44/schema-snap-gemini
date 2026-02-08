@@ -39,6 +39,7 @@ export type TemplateField = {
   name: string;
   description?: string;
   required?: boolean;
+  validationRule?: string;
 };
 
 export type Template = {
@@ -46,7 +47,17 @@ export type Template = {
   name: string;
   stakeholder: string;
   frequency: string;
+  nextDueDate?: string;
+  reminderDays?: number[];
   fields: TemplateField[];
+};
+
+export type MappingEntry = {
+  sourceFieldId: string | null;
+  operation?: string;
+  confidence?: number;
+  rationale?: string;
+  transformation?: string;
 };
 
 export type DataSource = {
@@ -64,5 +75,5 @@ export type PersistedState = {
   dataSources: DataSource[];
   templates: Template[];
   activeTemplateId: string | null;
-  mappingByTemplate: Record<string, Record<string, string | null>>;
+  mappingByTemplate: Record<string, Record<string, MappingEntry>>;
 };

@@ -26,9 +26,22 @@ type Props = {
   templates: Template[];
   snapshot: SchemaSnapshot | null;
   totalMapped: number;
+  onDownloadSnapshot: () => void;
+  onDownloadTemplates: () => void;
+  onDownloadMappings: () => void;
+  onDownloadJoinPlan: () => void;
 };
 
-const Analytics: React.FC<Props> = ({ dataSources, templates, snapshot, totalMapped }) => {
+const Analytics: React.FC<Props> = ({
+  dataSources,
+  templates,
+  snapshot,
+  totalMapped,
+  onDownloadSnapshot,
+  onDownloadTemplates,
+  onDownloadMappings,
+  onDownloadJoinPlan
+}) => {
   const totalFields = templates.reduce((acc, t) => acc + t.fields.length, 0);
   const relationships = snapshot?.relationships.length ?? 0;
 
@@ -68,6 +81,27 @@ const Analytics: React.FC<Props> = ({ dataSources, templates, snapshot, totalMap
           icon={<BarChart3 className="text-violet-600" />}
           color="bg-violet-600"
         />
+      </div>
+
+      <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden mb-6">
+        <div className="p-6 border-b border-slate-100">
+          <h3 className="font-bold text-slate-900">Downloads</h3>
+          <p className="text-sm text-slate-500">Export current state for sharing or audit.</p>
+        </div>
+        <div className="p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+          <button onClick={onDownloadSnapshot} className="bg-slate-900 text-white rounded-lg py-2 px-4 hover:bg-slate-800">
+            Snapshot JSON
+          </button>
+          <button onClick={onDownloadTemplates} className="bg-indigo-600 text-white rounded-lg py-2 px-4 hover:bg-indigo-700">
+            Templates JSON
+          </button>
+          <button onClick={onDownloadMappings} className="bg-emerald-600 text-white rounded-lg py-2 px-4 hover:bg-emerald-700">
+            Mappings JSON
+          </button>
+          <button onClick={onDownloadJoinPlan} className="bg-amber-600 text-white rounded-lg py-2 px-4 hover:bg-amber-700">
+            Join Plan SQL
+          </button>
+        </div>
       </div>
 
       <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
