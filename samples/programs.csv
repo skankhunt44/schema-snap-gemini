@@ -1,3 +1,4 @@
-program_id,program_name,location
-P001,Food Relief,Johor
-P002,Education Fund,Penang
+program_id,program_name,location,category,start_date
+P001,Food Relief,Johor,Relief,2023-06-01
+P002,Education Fund,Penang,Education,2023-08-15
+P003,Health Kits,Sabah,Health,2024-01-10

@@ -1,0 +1,3 @@
+campaign_id,campaign_name,goal_amount,start_date,end_date,status
+C001,Back to School,20000,2024-02-01,2024-04-30,active
+C002,Ramadan Giving,30000,2024-03-01,2024-04-15,active

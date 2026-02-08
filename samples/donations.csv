@@ -1,4 +1,5 @@
-donation_id,donor_id,amount,donation_date,program_id
-N1001,D001,250,2023-03-01,P001
-N1002,D002,100,2023-03-02,P002
-N1003,D001,75,2023-03-07,P002
+donation_id,donor_id,program_id,amount,currency,payment_method,donation_date
+N1001,D001,P001,250,MYR,card,2024-03-01
+N1002,D002,P002,100,MYR,bank_transfer,2024-03-02
+N1003,D001,P002,75,MYR,card,2024-03-07
+N1004,D003,P001,300,SGD,card,2024-03-08

@@ -1,0 +1,5 @@
+touchpoint_id,donor_id,channel,touchpoint_date,outcome
+T001,D001,email,2024-02-15,opened
+T002,D001,call,2024-02-20,pledge
+T003,D002,sms,2024-02-22,clicked
+T004,D003,email,2024-02-25,opened

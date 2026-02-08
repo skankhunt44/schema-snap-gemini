@@ -1,7 +1,7 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { ingestCsv, ingestDDL, ingestDB, ingestSQLite, getState, loadSampleSnapshot, saveState, suggestMappings } from './lib/api';
-import { DataSource, MappingEntry, Relationship, SchemaSnapshot, Template, TemplateField, SourceField } from './types';
+import { DataSource, MappingEntry, Relationship, SchemaSnapshot, Template, TemplateField, SourceField, TableSchema } from './types';
 import Sidebar from './components/Sidebar';
 import Dashboard from './pages/Dashboard';
 import DataSources from './pages/DataSources';
@@ -277,18 +277,33 @@ export default function App() {
     setSnapshot(data);
     setSelectedRel(null);
 
-    const sampleSources: DataSource[] = data.tables.map(table => {
-      const id = `sample-${table.name}`;
-      const name = table.name.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+    const sourceGroups = new Map<string, TableSchema[]>();
+    data.tables.forEach(table => {
+      const key = table.source || 'sample';
+      if (!sourceGroups.has(key)) sourceGroups.set(key, []);
+      sourceGroups.get(key)!.push(table);
+    });
+
+    const sourceMeta: Record<string, { name: string; type: string }> = {
+      crm_csv: { name: 'Donor CRM (CSV)', type: 'CSV' },
+      ledger_excel: { name: 'Donation Ledger (Excel)', type: 'Excel' },
+      ops_db: { name: 'Program Ops DB (Postgres)', type: 'Postgres' },
+      sample: { name: 'Sample Source', type: 'CSV' }
+    };
+
+    const sampleSources: DataSource[] = Array.from(sourceGroups.entries()).map(([key, tables], index) => {
+      const meta = sourceMeta[key] || { name: key, type: 'CSV' };
+      const id = `sample-${key}-${index}`;
+      const columnCount = tables.reduce((acc, table) => acc + table.columns.length, 0);
       return {
         id,
-        name,
-        type: 'CSV',
+        name: meta.name,
+        type: meta.type,
         status: 'connected',
-        tableCount: 1,
-        columnCount: table.columns.length,
+        tableCount: tables.length,
+        columnCount,
         lastSync: new Date().toLocaleString(),
-        fields: buildSourceFields({ tables: [table], relationships: [] }, id, name)
+        fields: buildSourceFields({ tables, relationships: [] }, id, meta.name)
       };
     });
     setDataSources(sampleSources);
@@ -306,11 +321,15 @@ export default function App() {
       fields: [
         { id: 'tf_donor_name', name: 'Donor Name', description: 'Primary donor name', required: true },
         { id: 'tf_donor_email', name: 'Donor Email', description: 'Primary email', required: true },
-        { id: 'tf_donation_date', name: 'Donation Date', description: 'Date of donation', required: true },
-        { id: 'tf_donation_amount', name: 'Donation Amount', description: 'Amount contributed', required: true },
-        { id: 'tf_total_donations', name: 'Total Donations', description: 'Total per donor', required: false },
+        { id: 'tf_donor_country', name: 'Donor Country', description: 'Country of residence', required: false },
+        { id: 'tf_donation_count', name: 'Donations Count', description: 'Total number of donations', required: false },
+        { id: 'tf_total_donations', name: 'Total Donations', description: 'Total donation amount', required: false },
+        { id: 'tf_avg_donation', name: 'Average Donation', description: 'Average donation amount', required: false },
+        { id: 'tf_last_donation', name: 'Last Donation Date', description: 'Most recent donation date', required: false },
         { id: 'tf_program_name', name: 'Program Name', description: 'Program funded', required: true },
-        { id: 'tf_program_location', name: 'Program Location', description: 'Location of program', required: false }
+        { id: 'tf_program_location', name: 'Program Location', description: 'Location of program', required: false },
+        { id: 'tf_program_budget', name: 'Allocated Program Budget', description: 'Budget allocated for program', required: false },
+        { id: 'tf_campaigns_active', name: 'Active Campaigns', description: 'Number of active campaigns', required: false }
       ]
     };
 
