@@ -104,11 +104,11 @@ export default function SchemaDiagram({ tables, relationships, minConfidence, on
                   style={{ cursor: 'pointer' }}
                 />
                 <rect
-                  x={midX - 55}
+                  x={midX - 20}
                   y={labelY - 9}
-                  width={110}
+                  width={40}
                   height={18}
-                  rx={6}
+                  rx={9}
                   fill="#ffffff"
                   stroke="#e2e8f0"
                   opacity="0.92"
@@ -119,11 +119,13 @@ export default function SchemaDiagram({ tables, relationships, minConfidence, on
                   y={labelY + 3}
                   textAnchor="middle"
                   fontSize="10"
+                  fontWeight={600}
                   fill="#334155"
                   style={{ pointerEvents: 'none' }}
                 >
-                  {rel.from.column} → {rel.to.column} ({Math.round(rel.confidence * 100)}%)
+                  {Math.round(rel.confidence * 100)}%
                 </text>
+                <title>{`${rel.from.column} → ${rel.to.column} (${Math.round(rel.confidence * 100)}%)`}</title>
               </g>
             );
           })}
