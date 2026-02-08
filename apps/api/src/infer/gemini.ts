@@ -1,7 +1,7 @@
 import { GoogleGenAI, Type } from '@google/genai';
 import { Relationship, TableSchema } from '../types/schema';
 
-const MODEL = 'gemini-3-flash';
+const MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
 
 const cleanJson = (text: string) => text.replace(/```json/g, '').replace(/```/g, '').trim();
 
