@@ -1,6 +1,6 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { ingestCsv, ingestDDL, ingestDB, ingestSQLite, getState, loadSampleSnapshot, saveState, suggestMappings } from './lib/api';
+import { ingestCsv, ingestDDL, ingestDB, ingestSQLite, getState, loadSampleSnapshot, saveState, suggestMappings, explainSchema, generateTemplate, suggestFixes } from './lib/api';
 import { DataSource, MappingEntry, Relationship, ReportEntry, SchemaSnapshot, Template, TemplateField, SourceField, TableSchema } from './types';
 import Sidebar from './components/Sidebar';
 import Dashboard from './pages/Dashboard';
@@ -12,6 +12,30 @@ import Analytics from './pages/Analytics';
 import Schedule from './pages/Schedule';
 import Settings from './pages/Settings';
 
+type PipelineStepStatus = 'idle' | 'running' | 'done' | 'error';
+
+type PipelineState = {
+  status: 'idle' | 'running' | 'done' | 'error';
+  error: string | null;
+  prompt: string;
+  steps: {
+    schema: PipelineStepStatus;
+    template: PipelineStepStatus;
+    mapping: PipelineStepStatus;
+    fixes: PipelineStepStatus;
+    output: PipelineStepStatus;
+  };
+  data: {
+    schemaSummary?: string;
+    joinPaths?: Array<{ title: string; path: string[]; rationale: string }>;
+    template?: Template;
+    mappingSummary?: string;
+    fixSummary?: string;
+    fixSuggestions?: Array<{ issue: string; fix: string; rationale?: string }>;
+    outputPreview?: { columns: string[]; rows: Record<string, unknown>[] };
+  };
+};
+
 export default function App() {
   const [snapshot, setSnapshot] = React.useState<SchemaSnapshot | null>(null);
   const [dataSources, setDataSources] = React.useState<DataSource[]>([]);
@@ -19,6 +43,13 @@ export default function App() {
   const [activeTemplateId, setActiveTemplateId] = React.useState<string | null>(null);
   const [mappingByTemplate, setMappingByTemplate] = React.useState<Record<string, Record<string, MappingEntry>>>({});
   const [reports, setReports] = React.useState<ReportEntry[]>([]);
+  const [pipeline, setPipeline] = React.useState<PipelineState>({
+    status: 'idle',
+    error: null,
+    prompt: 'Create a donor impact report template',
+    steps: { schema: 'idle', template: 'idle', mapping: 'idle', fixes: 'idle', output: 'idle' },
+    data: {}
+  });
 
   const [error, setError] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(false);
@@ -462,6 +493,191 @@ export default function App() {
     }
   };
 
+  const runAiPipeline = async (prompt: string) => {
+    if (!snapshot || sourceFields.length === 0) {
+      setPipeline(prev => ({
+        ...prev,
+        status: 'error',
+        error: 'Load data sources before running the AI pipeline.'
+      }));
+      return;
+    }
+
+    setPipeline({
+      status: 'running',
+      error: null,
+      prompt,
+      steps: { schema: 'running', template: 'idle', mapping: 'idle', fixes: 'idle', output: 'idle' },
+      data: {}
+    });
+
+    try {
+      const schemaResult = await explainSchema();
+      setPipeline(prev => ({
+        ...prev,
+        steps: { ...prev.steps, schema: 'done', template: 'running' },
+        data: {
+          ...prev.data,
+          schemaSummary: schemaResult.summary,
+          joinPaths: schemaResult.joinPaths
+        }
+      }));
+
+      const templateResult = await generateTemplate(prompt);
+      const newTemplate: Template = {
+        id: `tpl_ai_${Date.now()}`,
+        name: templateResult.name || 'AI Report Template',
+        stakeholder: templateResult.stakeholder || 'Stakeholders',
+        frequency: templateResult.frequency || 'Monthly',
+        fields: (templateResult.fields || []).map((field, idx) => ({
+          id: `tf_ai_${Date.now()}_${idx}`,
+          name: field.name,
+          description: field.description || '',
+          required: field.required ?? true,
+          validationRule: field.validationRule || ''
+        }))
+      };
+
+      const nextTemplates = [newTemplate, ...templates];
+      setTemplates(nextTemplates);
+      setActiveTemplateId(newTemplate.id);
+
+      setPipeline(prev => ({
+        ...prev,
+        steps: { ...prev.steps, template: 'done', mapping: 'running' },
+        data: {
+          ...prev.data,
+          template: newTemplate
+        }
+      }));
+
+      const payloadSourceFields = sourceFields.map(field => ({
+        id: field.id,
+        name: field.column,
+        description: field.table,
+        dataType: field.dataType
+      }));
+      const payloadTemplateFields = newTemplate.fields.map(field => ({
+        id: field.id,
+        name: field.name,
+        description: field.description
+      }));
+
+      const mappingResult = await suggestMappings(payloadSourceFields, payloadTemplateFields);
+      const map: Record<string, { sourceId: string | null; confidence: number; rationale: string; operation?: string }> = {};
+      mappingResult.mappings.forEach(mapping => {
+        map[mapping.templateFieldId] = {
+          sourceId: mapping.sourceFieldId ?? null,
+          confidence: mapping.confidence ?? 0,
+          rationale: mapping.rationale || '',
+          operation: mapping.operation
+        };
+      });
+
+      const enrichedMap: Record<string, { sourceId: string | null; confidence: number; rationale: string; operation?: string }> = {
+        ...map
+      };
+
+      newTemplate.fields.forEach(field => {
+        const detected = detectOperationFromField(field);
+        const current = enrichedMap[field.id];
+        if (detected && (!current?.operation || current.operation === 'DIRECT')) {
+          const sourceId = current?.sourceId || pickSourceFieldForOperation(field, detected, sourceFields);
+          enrichedMap[field.id] = {
+            sourceId,
+            confidence: current?.confidence ?? 0,
+            rationale: current?.rationale || 'Heuristic aggregation match',
+            operation: detected
+          };
+        }
+      });
+
+      const mappingEntries: Record<string, MappingEntry> = {};
+      newTemplate.fields.forEach(field => {
+        const entry = enrichedMap[field.id];
+        mappingEntries[field.id] = {
+          sourceFieldId: entry?.sourceId ?? null,
+          operation: entry?.operation ?? 'DIRECT',
+          confidence: entry?.confidence ?? 0,
+          rationale: entry?.rationale ?? ''
+        };
+      });
+
+      const nextMappingByTemplate = { ...mappingByTemplate, [newTemplate.id]: mappingEntries };
+
+      setMappingByTemplate(nextMappingByTemplate);
+      setAiSuggestionsByTemplate(prev => ({ ...prev, [newTemplate.id]: enrichedMap }));
+      setAiSummaryByTemplate(prev => ({ ...prev, [newTemplate.id]: mappingResult.summary || '' }));
+
+      setPipeline(prev => ({
+        ...prev,
+        steps: { ...prev.steps, mapping: 'done', fixes: 'running' },
+        data: {
+          ...prev.data,
+          mappingSummary: mappingResult.summary
+        }
+      }));
+
+      let fixSummary = '';
+      let fixSuggestions: Array<{ issue: string; fix: string; rationale?: string }> = [];
+      const tableForFix = snapshot.tables[0];
+      if (tableForFix) {
+        const fixResult = await suggestFixes(tableForFix.name);
+        fixSummary = fixResult.summary;
+        fixSuggestions = fixResult.suggestions || [];
+      }
+
+      setPipeline(prev => ({
+        ...prev,
+        steps: { ...prev.steps, fixes: 'done', output: 'running' },
+        data: {
+          ...prev.data,
+          fixSummary,
+          fixSuggestions
+        }
+      }));
+
+      await saveState({
+        snapshot,
+        dataSources,
+        templates: nextTemplates,
+        activeTemplateId: newTemplate.id,
+        mappingByTemplate: nextMappingByTemplate,
+        reports
+      });
+
+      let outputPreview: { columns: string[]; rows: Record<string, unknown>[] } | undefined;
+      const outputRes = await fetch(`/api/output?format=json&templateId=${encodeURIComponent(newTemplate.id)}`);
+      if (outputRes.ok) {
+        const payload = await outputRes.json();
+        const templatePayload = payload.templates?.[0];
+        if (templatePayload) {
+          outputPreview = {
+            columns: templatePayload.columns,
+            rows: (templatePayload.rows || []).slice(0, 6)
+          };
+        }
+      }
+
+      setPipeline(prev => ({
+        ...prev,
+        status: 'done',
+        steps: { ...prev.steps, output: 'done' },
+        data: {
+          ...prev.data,
+          outputPreview
+        }
+      }));
+    } catch (err: any) {
+      setPipeline(prev => ({
+        ...prev,
+        status: 'error',
+        error: err.message || 'AI pipeline failed',
+        steps: { ...prev.steps, output: 'error' }
+      }));
+    }
+  };
+
   const exportTemplateMappings = () => {
     if (!snapshot || !activeTemplate) return;
     const payload = buildTemplateMappingPayload(activeTemplate.id);
@@ -808,6 +1024,8 @@ export default function App() {
                   templateCoverage={templateCoverage}
                   reports={reports}
                   validationIssues={validationIssues}
+                  pipeline={pipeline}
+                  onRunPipeline={runAiPipeline}
                   onLoadSample={loadSampleData}
                   onGenerateReport={generateAndDownload}
                   onPublishReport={publishReport}

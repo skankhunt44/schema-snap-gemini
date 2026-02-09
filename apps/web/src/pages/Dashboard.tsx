@@ -31,12 +31,38 @@ type TemplateCoverage = {
   percent: number;
 };
 
+type PipelineStepStatus = 'idle' | 'running' | 'done' | 'error';
+
+type PipelineState = {
+  status: 'idle' | 'running' | 'done' | 'error';
+  error: string | null;
+  prompt: string;
+  steps: {
+    schema: PipelineStepStatus;
+    template: PipelineStepStatus;
+    mapping: PipelineStepStatus;
+    fixes: PipelineStepStatus;
+    output: PipelineStepStatus;
+  };
+  data: {
+    schemaSummary?: string;
+    joinPaths?: Array<{ title: string; path: string[]; rationale: string }>;
+    template?: Template;
+    mappingSummary?: string;
+    fixSummary?: string;
+    fixSuggestions?: Array<{ issue: string; fix: string; rationale?: string }>;
+    outputPreview?: { columns: string[]; rows: Record<string, unknown>[] };
+  };
+};
+
 const Dashboard: React.FC<{
   templates: Template[];
   dataSources: DataSource[];
   templateCoverage: TemplateCoverage[];
   reports: ReportEntry[];
   validationIssues: number;
+  pipeline: PipelineState;
+  onRunPipeline: (prompt: string) => void;
   onLoadSample: () => void;
   onGenerateReport: (templateId: string) => void;
   onPublishReport: (reportId: string) => void;
@@ -46,11 +72,14 @@ const Dashboard: React.FC<{
   templateCoverage,
   reports,
   validationIssues,
+  pipeline,
+  onRunPipeline,
   onLoadSample,
   onGenerateReport,
   onPublishReport
 }) => {
   const navigate = useNavigate();
+  const [pipelinePrompt, setPipelinePrompt] = React.useState(pipeline.prompt);
   const mappedTemplates = templateCoverage.filter(template => template.mapped > 0);
 
   const chartData = useMemo(() => {
@@ -97,11 +126,25 @@ const Dashboard: React.FC<{
   const apiUrlForTemplate = (templateId: string) =>
     `${window.location.origin}/api/output?format=json&templateId=${encodeURIComponent(templateId)}`;
 
+  const statusColor = (status: PipelineStepStatus) => {
+    if (status === 'done') return 'text-emerald-600';
+    if (status === 'running') return 'text-indigo-600';
+    if (status === 'error') return 'text-rose-600';
+    return 'text-slate-400';
+  };
+
   return (
     <div className="p-6">
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-slate-900">Welcome to SchemaSnap</h1>
         <p className="text-slate-500">Discover relationships and map messy data to stakeholder templates in minutes.</p>
+      </div>
+
+      <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-4 mb-8">
+        <p className="text-sm text-indigo-900 font-semibold">Problem we solve</p>
+        <p className="text-sm text-indigo-700">
+          Teams waste weeks reconciling messy, mismatched data sources into stakeholder-ready reports — SchemaSnap turns that into a 3-minute, AI-guided workflow.
+        </p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 mb-8">
@@ -133,6 +176,116 @@ const Dashboard: React.FC<{
           icon={<Database className="text-sky-600" />}
           color="bg-sky-600"
         />
+      </div>
+
+      <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm mb-8">
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-4">
+          <div>
+            <h3 className="text-lg font-semibold text-slate-900">AI Report Builder</h3>
+            <p className="text-sm text-slate-500">Describe the report you need. Gemini will explain the schema, build a template, map fields, suggest fixes, and generate a preview.</p>
+          </div>
+          <button
+            onClick={() => onRunPipeline(pipelinePrompt)}
+            disabled={pipeline.status === 'running'}
+            className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50"
+          >
+            {pipeline.status === 'running' ? 'Running…' : 'Run AI Pipeline'}
+          </button>
+        </div>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="space-y-4">
+            <textarea
+              className="w-full border border-slate-200 rounded-lg px-3 py-2 min-h-[110px]"
+              value={pipelinePrompt}
+              onChange={(e) => setPipelinePrompt(e.target.value)}
+              placeholder="Create a donor impact report template for board members"
+            />
+            {pipeline.error && <p className="text-sm text-rose-500">{pipeline.error}</p>}
+            <div className="space-y-2 text-sm text-slate-600">
+              <div className="flex items-center justify-between">
+                <span>1. Schema Explainer</span>
+                <span className={statusColor(pipeline.steps.schema)}>{pipeline.steps.schema}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span>2. Template Generator</span>
+                <span className={statusColor(pipeline.steps.template)}>{pipeline.steps.template}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span>3. Auto‑Mapping + Ops</span>
+                <span className={statusColor(pipeline.steps.mapping)}>{pipeline.steps.mapping}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span>4. Fix Suggestions</span>
+                <span className={statusColor(pipeline.steps.fixes)}>{pipeline.steps.fixes}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span>5. Output Preview</span>
+                <span className={statusColor(pipeline.steps.output)}>{pipeline.steps.output}</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            {pipeline.data.schemaSummary && (
+              <div className="bg-slate-50 border border-slate-200 rounded-lg p-3">
+                <div className="text-xs uppercase tracking-wide text-slate-400 mb-1">Schema Summary</div>
+                <p className="text-sm text-slate-700">{pipeline.data.schemaSummary}</p>
+              </div>
+            )}
+            {pipeline.data.joinPaths && pipeline.data.joinPaths.length > 0 && (
+              <div className="bg-slate-50 border border-slate-200 rounded-lg p-3">
+                <div className="text-xs uppercase tracking-wide text-slate-400 mb-2">Join Paths</div>
+                <ul className="text-xs text-slate-600 space-y-1">
+                  {pipeline.data.joinPaths.map((path, idx) => (
+                    <li key={idx}><span className="font-semibold">{path.title}:</span> {path.path.join(' → ')}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {pipeline.data.mappingSummary && (
+              <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-3">
+                <div className="text-xs uppercase tracking-wide text-indigo-500 mb-1">Gemini Mapping Summary</div>
+                <p className="text-sm text-indigo-700">{pipeline.data.mappingSummary}</p>
+              </div>
+            )}
+            {pipeline.data.fixSummary && (
+              <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3">
+                <div className="text-xs uppercase tracking-wide text-emerald-500 mb-1">Fix Suggestions</div>
+                <p className="text-sm text-emerald-700 mb-2">{pipeline.data.fixSummary}</p>
+                <ul className="text-xs text-emerald-700 space-y-1">
+                  {(pipeline.data.fixSuggestions || []).slice(0, 3).map((item, idx) => (
+                    <li key={idx}><span className="font-semibold">{item.issue}</span> → {item.fix}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {pipeline.data.outputPreview && pipeline.data.outputPreview.columns.length > 0 && (
+              <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
+                <div className="px-3 py-2 text-xs uppercase tracking-wide text-slate-400 bg-slate-50">Output Preview</div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead className="bg-slate-50 text-slate-500">
+                      <tr>
+                        {pipeline.data.outputPreview.columns.slice(0, 6).map(col => (
+                          <th key={col} className="px-2 py-2 text-left font-medium">{col}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {pipeline.data.outputPreview.rows.slice(0, 5).map((row, idx) => (
+                        <tr key={idx}>
+                          {pipeline.data.outputPreview!.columns.slice(0, 6).map(col => (
+                            <td key={col} className="px-2 py-2 text-slate-600">{String(row[col] ?? '')}</td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-8">
