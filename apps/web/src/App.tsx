@@ -102,7 +102,14 @@ export default function App() {
   };
 
   const isMissing = (value: unknown) => value === null || value === undefined || String(value).trim() === '';
-  const isIdColumn = (name: string) => /(^id$|_id$|id$)/i.test(name);
+  const normalizeToken = (value: string) => value.toLowerCase().replace(/[^a-z0-9]/g, '');
+  const singularize = (value: string) => (value.endsWith('s') ? value.slice(0, -1) : value);
+  const tableBase = (name: string) => singularize(normalizeToken(name.split('_').slice(-1)[0] || name));
+  const isPrimaryKeyColumn = (tableName: string, columnName: string) => {
+    const col = normalizeToken(columnName);
+    const base = tableBase(tableName);
+    return col === 'id' || col === `${base}id`;
+  };
 
   const median = (values: number[]) => {
     if (!values.length) return 0;
@@ -161,7 +168,9 @@ export default function App() {
       }
     });
 
-    const idColumns = table.columns.filter(column => isIdColumn(column.name)).map(column => column.name);
+    const idColumns = table.columns
+      .filter(column => isPrimaryKeyColumn(table.name, column.name))
+      .map(column => column.name);
     const seen = new Set<string>();
 
     const cleanedRows = rows.reduce<Record<string, unknown>[]>((acc, row) => {

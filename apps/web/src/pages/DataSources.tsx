@@ -111,7 +111,14 @@ const DataSources: React.FC<Props> = ({
     </button>
   );
 
-  const isIdColumn = (name: string) => /(^id$|_id$|id$)/i.test(name);
+  const normalizeToken = (value: string) => value.toLowerCase().replace(/[^a-z0-9]/g, '');
+  const singularize = (value: string) => (value.endsWith('s') ? value.slice(0, -1) : value);
+  const tableBase = (name: string) => singularize(normalizeToken(name.split('_').slice(-1)[0] || name));
+  const isPrimaryKeyColumn = (tableName: string, columnName: string) => {
+    const col = normalizeToken(columnName);
+    const base = tableBase(tableName);
+    return col === 'id' || col === `${base}id`;
+  };
 
   const getNumericValues = (table: TableSchema, columnName: string) => {
     if (!table.sampleRows?.length) return [];
@@ -135,10 +142,10 @@ const DataSources: React.FC<Props> = ({
   const qualityTables = (snapshot?.tables || []).map(table => {
     const missingColumns = table.columns.filter(c => (c.nullRatio ?? 0) >= 0.05);
     const duplicateIdColumns = table.columns.filter(
-      c => isIdColumn(c.name) && (c.uniqueRatio ?? 1) < 0.9
+      c => isPrimaryKeyColumn(table.name, c.name) && (c.uniqueRatio ?? 1) < 0.9
     );
     const lowVarianceColumns = table.columns.filter(
-      c => !isIdColumn(c.name) && (c.uniqueRatio ?? 1) > 0 && (c.uniqueRatio ?? 1) < 0.05
+      c => !isPrimaryKeyColumn(table.name, c.name) && (c.uniqueRatio ?? 1) > 0 && (c.uniqueRatio ?? 1) < 0.05
     );
 
     const outlierColumns = table.columns
@@ -310,7 +317,7 @@ const DataSources: React.FC<Props> = ({
                     <ul className="text-sm text-slate-600 space-y-1">
                       {duplicateIdColumns.map(col => (
                         <li key={col.name}>
-                          <span className="font-medium text-slate-800">{col.name}</span> — unique ratio {Math.round((col.uniqueRatio || 0) * 100)}%. Suggest deduping on this ID.
+                          <span className="font-medium text-slate-800">{col.name}</span> — unique ratio {Math.round((col.uniqueRatio || 0) * 100)}%. Possible primary key duplicates; consider deduping.
                         </li>
                       ))}
                     </ul>

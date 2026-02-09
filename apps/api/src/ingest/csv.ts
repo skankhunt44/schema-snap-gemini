@@ -8,7 +8,14 @@ const PREVIEW_LIMIT = 25;
 
 const stripExt = (name: string) => name.replace(/\.(csv|xlsx|xls)$/i, '');
 const isMissing = (value: unknown) => value === null || value === undefined || String(value).trim() === '';
-const isIdColumn = (name: string) => /(^id$|_id$|id$)/i.test(name);
+const normalizeToken = (value: string) => value.toLowerCase().replace(/[^a-z0-9]/g, '');
+const singularize = (value: string) => (value.endsWith('s') ? value.slice(0, -1) : value);
+const tableBase = (name: string) => singularize(normalizeToken(name.split('_').slice(-1)[0] || name));
+const isPrimaryKeyColumn = (tableName: string, columnName: string) => {
+  const col = normalizeToken(columnName);
+  const base = tableBase(tableName);
+  return col === 'id' || col === `${base}id`;
+};
 
 const parseRows = (buffer: Buffer, filename: string) => {
   const lower = filename.toLowerCase();
@@ -72,7 +79,7 @@ const buildTable = (name: string, rows: Record<string, unknown>[], source: strin
   };
 };
 
-const applyAutoFix = (rows: Record<string, unknown>[]) => {
+const applyAutoFix = (rows: Record<string, unknown>[], tableName: string) => {
   if (!rows.length) return rows;
   const columns = Object.keys(rows[0] || {});
   const profiles = columns.map(col => {
@@ -97,7 +104,9 @@ const applyAutoFix = (rows: Record<string, unknown>[]) => {
     }
   });
 
-  const idColumns = profiles.filter(p => isIdColumn(p.name)).map(p => p.name);
+  const idColumns = profiles
+    .filter(p => isPrimaryKeyColumn(tableName, p.name))
+    .map(p => p.name);
   const seen = new Set<string>();
 
   const cleaned = rows.reduce<Record<string, unknown>[]>((acc, row) => {
@@ -149,6 +158,6 @@ export const ingestCsvBuffer = (buffer: Buffer, filename: string): TableSchema =
 export const ingestCsvBufferAutoFix = (buffer: Buffer, filename: string): TableSchema => {
   const tableName = stripExt(filename);
   const { rows, source } = parseRows(buffer, filename);
-  const cleaned = applyAutoFix(rows);
+  const cleaned = applyAutoFix(rows, tableName);
   return buildTable(tableName, cleaned, source);
 };
