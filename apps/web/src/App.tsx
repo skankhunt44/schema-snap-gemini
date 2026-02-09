@@ -771,6 +771,7 @@ export default function App() {
     const sourceMeta: Record<string, { name: string; type: string }> = {
       crm_csv: { name: 'Donor CRM (CSV)', type: 'CSV' },
       ledger_excel: { name: 'Donation Ledger (Excel)', type: 'Excel' },
+      dirty_csv: { name: 'Dirty Donations (CSV)', type: 'CSV' },
       ops_db: { name: 'Program Ops DB (Postgres)', type: 'Postgres' },
       sample: { name: 'Sample Source', type: 'CSV' }
     };
@@ -817,7 +818,27 @@ export default function App() {
       ]
     };
 
-    setTemplates([sampleTemplate]);
+    const programTemplate: Template = {
+      id: 'tpl_program',
+      name: 'Program Performance Overview',
+      stakeholder: 'Program Directors',
+      frequency: 'Quarterly',
+      nextDueDate: nextDue.toISOString().split('T')[0],
+      reminderDays: [14, 7, 3],
+      fields: [
+        { id: 'tf_program_name_2', name: 'Program Name', description: 'Program funded', required: true },
+        { id: 'tf_program_category', name: 'Program Category', description: 'Program category', required: false },
+        { id: 'tf_program_location_2', name: 'Program Location', description: 'Location of program', required: false },
+        { id: 'tf_program_budget_2', name: 'Allocated Program Budget', description: 'Budget allocated for program', required: false },
+        { id: 'tf_donations_count_2', name: 'Donations Count', description: 'Total donations for program', required: false },
+        { id: 'tf_total_donations_2', name: 'Total Donations', description: 'Total donation amount', required: false },
+        { id: 'tf_avg_donation_2', name: 'Average Donation', description: 'Average donation amount', required: false },
+        { id: 'tf_active_campaigns_2', name: 'Active Campaigns', description: 'Number of active campaigns', required: false },
+        { id: 'tf_program_start', name: 'Program Start Date', description: 'Program start date', required: false }
+      ]
+    };
+
+    setTemplates([sampleTemplate, programTemplate]);
     setActiveTemplateId(sampleTemplate.id);
     setMappingByTemplate({});
     setReports([]);

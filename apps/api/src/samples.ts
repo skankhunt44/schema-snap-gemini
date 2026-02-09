@@ -19,6 +19,13 @@ const sampleData = {
     { donation_id: 'N1003', donor_id: 'D001', program_id: 'P002', amount: 75, currency: 'MYR', payment_method: 'card', donation_date: '2024-03-07' },
     { donation_id: 'N1004', donor_id: 'D003', program_id: 'P001', amount: 300, currency: 'SGD', payment_method: 'card', donation_date: '2024-03-08' }
   ],
+  donations_dirty: [
+    { donation_id: 'N2001', donor_id: 'D001', program_id: 'P001', amount: 250, currency: 'MYR', payment_method: 'card', donation_date: '2024-03-01' },
+    { donation_id: 'N2001', donor_id: 'D001', program_id: 'P001', amount: '', currency: 'MYR', payment_method: 'card', donation_date: '2024-03-01' },
+    { donation_id: 'N2002', donor_id: '', program_id: 'P002', amount: -50, currency: 'MYR', payment_method: 'cash', donation_date: '2024-03-05' },
+    { donation_id: 'N2003', donor_id: 'D002', program_id: 'P002', amount: 100000, currency: 'MYR', payment_method: 'bank_transfer', donation_date: '2030-01-01' },
+    { donation_id: 'N2004', donor_id: 'D003', program_id: '', amount: 120, currency: '', payment_method: 'card', donation_date: '' }
+  ],
   payments: [
     { payment_id: 'PAY001', donation_id: 'N1001', processor_fee: 7.5, net_amount: 242.5, settlement_date: '2024-03-02' },
     { payment_id: 'PAY002', donation_id: 'N1002', processor_fee: 2.5, net_amount: 97.5, settlement_date: '2024-03-03' },
@@ -63,6 +70,7 @@ export const loadSampleTables = (): TableSchema[] => {
     buildTable('donor_touchpoints', sampleData.donor_touchpoints, 'crm_csv'),
     buildTable('donations', sampleData.donations, 'ledger_excel'),
     buildTable('payments', sampleData.payments, 'ledger_excel'),
+    buildTable('donations_dirty', sampleData.donations_dirty, 'dirty_csv'),
     buildTable('programs', sampleData.programs, 'ops_db'),
     buildTable('allocations', sampleData.allocations, 'ops_db'),
     buildTable('campaigns', sampleData.campaigns, 'ops_db')
