@@ -9,11 +9,12 @@ import {
   FileText,
   UploadCloud
 } from 'lucide-react';
-import { DataSource } from '../types';
+import { DataSource, SchemaSnapshot, TableSchema } from '../types';
 import ConfirmDialog from '../components/ConfirmDialog';
 
 type Props = {
   dataSources: DataSource[];
+  snapshot: SchemaSnapshot | null;
   loading: boolean;
   error: string | null;
   onCsvIngest: (name: string, files: File[]) => Promise<boolean> | boolean;
@@ -25,6 +26,7 @@ type Props = {
 
 const DataSources: React.FC<Props> = ({
   dataSources,
+  snapshot,
   loading,
   error,
   onCsvIngest,
@@ -102,6 +104,71 @@ const DataSources: React.FC<Props> = ({
     </button>
   );
 
+  const downloadTextFile = (filename: string, content: string) => {
+    const blob = new Blob([content], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const isIdColumn = (name: string) => /(^id$|_id$|id$)/i.test(name);
+
+  const buildFixScript = (table: TableSchema) => {
+    const missingColumns = table.columns.filter(c => (c.nullRatio ?? 0) >= 0.05);
+    const idColumns = table.columns.filter(c => isIdColumn(c.name));
+
+    const lines: string[] = [
+      'import pandas as pd',
+      '',
+      `df = pd.read_csv("${table.name}.csv")`,
+      ''
+    ];
+
+    missingColumns.forEach(col => {
+      const name = col.name;
+      const dataType = col.dataType;
+      if (dataType === 'number' || dataType === 'currency') {
+        lines.push(`df["${name}"] = pd.to_numeric(df["${name}"], errors="coerce")`);
+        lines.push(`df["${name}"] = df["${name}"].fillna(df["${name}"].median())`);
+      } else if (dataType === 'date') {
+        lines.push(`df["${name}"] = pd.to_datetime(df["${name}"], errors="coerce")`);
+        lines.push(`df["${name}"] = df["${name}"].fillna(df["${name}"].mode().iloc[0])`);
+      } else {
+        lines.push(`df["${name}"] = df["${name}"].fillna(df["${name}"].mode().iloc[0])`);
+      }
+      lines.push('');
+    });
+
+    if (idColumns.length) {
+      const idList = idColumns.map(c => `"${c.name}"`).join(', ');
+      lines.push(`df = df.drop_duplicates(subset=[${idList}])`);
+      lines.push('');
+    }
+
+    lines.push(`df.to_csv("${table.name}.cleaned.csv", index=False)`);
+    return lines.join('\n');
+  };
+
+  const qualityTables = (snapshot?.tables || []).map(table => {
+    const missingColumns = table.columns.filter(c => (c.nullRatio ?? 0) >= 0.05);
+    const duplicateIdColumns = table.columns.filter(
+      c => isIdColumn(c.name) && (c.uniqueRatio ?? 1) < 0.9
+    );
+    const lowVarianceColumns = table.columns.filter(
+      c => !isIdColumn(c.name) && (c.uniqueRatio ?? 1) > 0 && (c.uniqueRatio ?? 1) < 0.05
+    );
+
+    return { table, missingColumns, duplicateIdColumns, lowVarianceColumns };
+  });
+
+  const tablesWithIssues = qualityTables.filter(
+    entry =>
+      entry.missingColumns.length || entry.duplicateIdColumns.length || entry.lowVarianceColumns.length
+  );
+
   return (
     <div className="p-6">
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
@@ -145,6 +212,83 @@ const DataSources: React.FC<Props> = ({
               </div>
             </div>
           ))
+        )}
+      </div>
+
+      <div className="mt-8">
+        <div className="mb-4">
+          <h2 className="text-lg font-semibold text-slate-900">Data Quality</h2>
+          <p className="text-sm text-slate-500">
+            Based on profile stats from the uploaded data sample (missing values, uniqueness, etc.).
+          </p>
+        </div>
+
+        {!snapshot ? (
+          <div className="bg-white p-6 rounded-xl border border-slate-200 text-slate-500">
+            Upload data to generate a data quality report.
+          </div>
+        ) : tablesWithIssues.length === 0 ? (
+          <div className="bg-white p-6 rounded-xl border border-slate-200 text-emerald-600">
+            No major quality issues detected in the sampled data.
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {tablesWithIssues.map(({ table, missingColumns, duplicateIdColumns, lowVarianceColumns }) => (
+              <div key={table.name} className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
+                  <div>
+                    <h3 className="font-semibold text-slate-900">{table.name}</h3>
+                    <p className="text-xs text-slate-500">{table.columns.length} columns • {table.rowCount ?? '—'} rows sampled</p>
+                  </div>
+                  <button
+                    onClick={() => downloadTextFile(`${table.name}-cleaning.py`, buildFixScript(table))}
+                    className="px-3 py-2 text-xs bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
+                  >
+                    Download Fix Script
+                  </button>
+                </div>
+
+                {missingColumns.length > 0 && (
+                  <div className="mb-3">
+                    <div className="text-xs uppercase tracking-wide text-slate-400 mb-1">Missing values</div>
+                    <ul className="text-sm text-slate-600 space-y-1">
+                      {missingColumns.map(col => (
+                        <li key={col.name}>
+                          <span className="font-medium text-slate-800">{col.name}</span> — {Math.round((col.nullRatio || 0) * 100)}% missing. Suggest fill with {col.dataType === 'number' || col.dataType === 'currency' ? 'median' : 'mode'} or drop rows.
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {duplicateIdColumns.length > 0 && (
+                  <div className="mb-3">
+                    <div className="text-xs uppercase tracking-wide text-slate-400 mb-1">Duplicate IDs</div>
+                    <ul className="text-sm text-slate-600 space-y-1">
+                      {duplicateIdColumns.map(col => (
+                        <li key={col.name}>
+                          <span className="font-medium text-slate-800">{col.name}</span> — unique ratio {Math.round((col.uniqueRatio || 0) * 100)}%. Suggest deduping on this ID.
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {lowVarianceColumns.length > 0 && (
+                  <div>
+                    <div className="text-xs uppercase tracking-wide text-slate-400 mb-1">Low variance</div>
+                    <ul className="text-sm text-slate-600 space-y-1">
+                      {lowVarianceColumns.map(col => (
+                        <li key={col.name}>
+                          <span className="font-medium text-slate-800">{col.name}</span> — low uniqueness. Consider dropping or grouping this column.
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
         )}
       </div>
 

@@ -526,6 +526,7 @@ export default function App() {
               element={
                 <DataSources
                   dataSources={dataSources}
+                  snapshot={snapshot}
                   loading={loading}
                   error={error}
                   onCsvIngest={(name, files) => handleIngest('CSV', name, () => ingestCsv(files))}
