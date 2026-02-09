@@ -113,6 +113,25 @@ const DataSources: React.FC<Props> = ({
 
   const isIdColumn = (name: string) => /(^id$|_id$|id$)/i.test(name);
 
+  const getNumericValues = (table: TableSchema, columnName: string) => {
+    if (!table.sampleRows?.length) return [];
+    return table.sampleRows
+      .map(row => Number(row[columnName]))
+      .filter(value => !Number.isNaN(value));
+  };
+
+  const quantile = (values: number[], q: number) => {
+    if (!values.length) return 0;
+    const sorted = [...values].sort((a, b) => a - b);
+    const pos = (sorted.length - 1) * q;
+    const base = Math.floor(pos);
+    const rest = pos - base;
+    if (sorted[base + 1] !== undefined) {
+      return sorted[base] + rest * (sorted[base + 1] - sorted[base]);
+    }
+    return sorted[base];
+  };
+
   const qualityTables = (snapshot?.tables || []).map(table => {
     const missingColumns = table.columns.filter(c => (c.nullRatio ?? 0) >= 0.05);
     const duplicateIdColumns = table.columns.filter(
@@ -122,12 +141,38 @@ const DataSources: React.FC<Props> = ({
       c => !isIdColumn(c.name) && (c.uniqueRatio ?? 1) > 0 && (c.uniqueRatio ?? 1) < 0.05
     );
 
-    return { table, missingColumns, duplicateIdColumns, lowVarianceColumns };
+    const outlierColumns = table.columns
+      .filter(c => c.dataType === 'number' || c.dataType === 'currency')
+      .map(c => {
+        const values = getNumericValues(table, c.name);
+        if (values.length < 8) return null;
+        const q1 = quantile(values, 0.25);
+        const q3 = quantile(values, 0.75);
+        const iqr = q3 - q1;
+        if (iqr === 0) return null;
+        const lower = q1 - 1.5 * iqr;
+        const upper = q3 + 1.5 * iqr;
+        const outliers = values.filter(v => v < lower || v > upper);
+        if (!outliers.length) return null;
+        return {
+          name: c.name,
+          count: outliers.length,
+          sample: outliers.slice(0, 3),
+          lower,
+          upper
+        };
+      })
+      .filter(Boolean) as Array<{ name: string; count: number; sample: number[]; lower: number; upper: number }>;
+
+    return { table, missingColumns, duplicateIdColumns, lowVarianceColumns, outlierColumns };
   });
 
   const tablesWithIssues = qualityTables.filter(
     entry =>
-      entry.missingColumns.length || entry.duplicateIdColumns.length || entry.lowVarianceColumns.length
+      entry.missingColumns.length ||
+      entry.duplicateIdColumns.length ||
+      entry.lowVarianceColumns.length ||
+      entry.outlierColumns.length
   );
 
   const previewSource = dataSources.find(source => source.id === previewSourceId) || null;
@@ -227,7 +272,7 @@ const DataSources: React.FC<Props> = ({
           </div>
         ) : (
           <div className="space-y-4">
-            {tablesWithIssues.map(({ table, missingColumns, duplicateIdColumns, lowVarianceColumns }) => (
+            {tablesWithIssues.map(({ table, missingColumns, duplicateIdColumns, lowVarianceColumns, outlierColumns }) => (
               <div key={table.name} className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
                 <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
                   <div>
@@ -266,6 +311,19 @@ const DataSources: React.FC<Props> = ({
                       {duplicateIdColumns.map(col => (
                         <li key={col.name}>
                           <span className="font-medium text-slate-800">{col.name}</span> — unique ratio {Math.round((col.uniqueRatio || 0) * 100)}%. Suggest deduping on this ID.
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {outlierColumns.length > 0 && (
+                  <div className="mb-3">
+                    <div className="text-xs uppercase tracking-wide text-slate-400 mb-1">Outliers (IQR)</div>
+                    <ul className="text-sm text-slate-600 space-y-1">
+                      {outlierColumns.map(col => (
+                        <li key={col.name}>
+                          <span className="font-medium text-slate-800">{col.name}</span> — {col.count} outliers detected. Suggest capping to range {col.lower.toFixed(2)}–{col.upper.toFixed(2)} or reviewing the rows. Example: {col.sample.join(', ')}
                         </li>
                       ))}
                     </ul>
