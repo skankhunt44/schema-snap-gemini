@@ -38,9 +38,18 @@ const SmartMapper: React.FC<Props> = ({
   const [selectedSourceIds, setSelectedSourceIds] = React.useState<string[]>([]);
 
   React.useEffect(() => {
-    if (dataSources.length > 0 && selectedSourceIds.length === 0) {
-      setSelectedSourceIds(dataSources.map(ds => ds.id));
+    if (!dataSources.length) {
+      setSelectedSourceIds([]);
+      return;
     }
+
+    setSelectedSourceIds(prev => {
+      if (prev.length === 0) return dataSources.map(ds => ds.id);
+      const allIds = dataSources.map(ds => ds.id);
+      const kept = prev.filter(id => allIds.includes(id));
+      const missing = allIds.filter(id => !kept.includes(id));
+      return [...kept, ...missing];
+    });
   }, [dataSources]);
 
   const filteredSources = sourceFields.filter(field => {

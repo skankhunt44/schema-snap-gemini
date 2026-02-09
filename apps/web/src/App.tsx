@@ -248,6 +248,30 @@ export default function App() {
     return snapshot ? buildSourceFields(snapshot) : [];
   }, [snapshot, dataSources]);
 
+  React.useEffect(() => {
+    if (!snapshot || !dataSources.length) return;
+    const needsPatch = dataSources.some(ds => !ds.fields || ds.fields.length === 0);
+    if (!needsPatch) return;
+
+    const tableLookup = new Map(snapshot.tables.map(table => [normalize(table.name), table]));
+    const patchedSources = dataSources.map(ds => {
+      if (ds.fields?.length) return ds;
+      const matchedTable = tableLookup.get(normalize(ds.name));
+      if (matchedTable) {
+        return {
+          ...ds,
+          fields: buildSourceFields({ tables: [matchedTable], relationships: [] }, ds.id, ds.name)
+        };
+      }
+      return {
+        ...ds,
+        fields: buildSourceFields(snapshot, ds.id, ds.name)
+      };
+    });
+
+    setDataSources(patchedSources);
+  }, [snapshot, dataSources]);
+
   const heuristicSuggestionMap = React.useMemo(() => {
     const map: Record<string, { sourceId: string | null; confidence: number; rationale: string }> = {};
     if (!snapshot || !templateFields.length) return map;
