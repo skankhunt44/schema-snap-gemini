@@ -359,8 +359,6 @@ export default function App() {
     downloadTextFile('template-mapping.json', JSON.stringify(payload, null, 2));
   };
 
-  const csvEscape = (value: string) => `"${value.replace(/"/g, '""')}"`;
-
   const buildTemplateMappingPayload = (templateId: string) => {
     const template = templates.find(t => t.id === templateId);
     if (!template) return null;
@@ -384,44 +382,6 @@ export default function App() {
         operation: mapping[field.id]?.operation || 'DIRECT'
       }))
     };
-  };
-
-  const downloadTemplateMappingJson = (templateId: string) => {
-    const payload = buildTemplateMappingPayload(templateId);
-    if (!payload) return;
-    downloadTextFile(`template-mapping-${payload.template.name}.json`, JSON.stringify(payload, null, 2));
-  };
-
-  const downloadTemplateMappingCsv = (templateId: string) => {
-    const payload = buildTemplateMappingPayload(templateId);
-    if (!payload) return;
-    const headers = ['Template Field', 'Description', 'Required', 'Validation Rule', 'Source Field', 'Operation', 'Confidence', 'Rationale'];
-    const rows = payload.templateFields.map(field => [
-      field.name,
-      field.description || '',
-      String(field.required),
-      field.validationRule || '',
-      field.sourceField || '',
-      field.operation || 'DIRECT',
-      field.confidence ?? '',
-      field.rationale || ''
-    ]);
-    const csv = [headers.map(csvEscape).join(','), ...rows.map(row => row.map(val => csvEscape(String(val))).join(','))].join('\n');
-    downloadTextFile(`template-mapping-${payload.template.name}.csv`, csv);
-  };
-
-  const downloadTemplateDefinitionCsv = (templateId: string) => {
-    const template = templates.find(t => t.id === templateId);
-    if (!template) return;
-    const headers = ['Field Name', 'Description', 'Required', 'Rule'];
-    const rows = template.fields.map(field => [
-      field.name,
-      field.description || '',
-      String(field.required ?? true),
-      field.validationRule || ''
-    ]);
-    const csv = [headers.map(csvEscape).join(','), ...rows.map(row => row.map(val => csvEscape(String(val))).join(','))].join('\n');
-    downloadTextFile(`template-definition-${template.name}.csv`, csv);
   };
 
   const downloadSnapshot = () => {
@@ -817,9 +777,6 @@ export default function App() {
                   onDownloadTemplates={downloadTemplates}
                   onDownloadMappings={downloadMappings}
                   onDownloadJoinPlan={downloadJoinPlan}
-                  onDownloadTemplateMappingJson={downloadTemplateMappingJson}
-                  onDownloadTemplateMappingCsv={downloadTemplateMappingCsv}
-                  onDownloadTemplateDefinitionCsv={downloadTemplateDefinitionCsv}
                 />
               }
             />

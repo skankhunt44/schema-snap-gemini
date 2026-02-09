@@ -9,6 +9,7 @@ import { inferRelationships } from './infer';
 import { suggestMappingsGemini } from './map/suggest';
 import { loadSampleTables } from './samples';
 import { readState, writeState } from './store';
+import { buildCombinedOutput, buildCombinedWorkbook } from './output';
 import { SchemaSnapshot, TableSchema } from './types/schema';
 
 export const createApp = () => {
@@ -37,6 +38,32 @@ export const createApp = () => {
       res.json({ ok: true });
     } catch (err: any) {
       res.status(500).json({ error: err.message || 'Failed to save state' });
+    }
+  });
+
+  app.get('/api/output', async (req, res) => {
+    try {
+      const format = String(req.query.format || 'json').toLowerCase();
+      const templateId = typeof req.query.templateId === 'string' ? req.query.templateId : undefined;
+      const state = await readState();
+      if (!state) return res.status(400).json({ error: 'No saved state available.' });
+
+      const payload = buildCombinedOutput(state, templateId);
+      if (format === 'xlsx') {
+        const buffer = buildCombinedWorkbook(payload);
+        const templateName = payload.templates[0]?.templateName || 'combined-data';
+        const filename = templateId ? `combined-data-${templateName}.xlsx` : 'combined-data.xlsx';
+        res.setHeader('Content-Disposition', `attachment; filename="${filename.replace(/\s+/g, '_')}"`);
+        res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        res.send(buffer);
+        return;
+      }
+
+      res.json(payload);
+    } catch (err: any) {
+      const message = err.message || 'Failed to generate combined output';
+      const status = message.toLowerCase().includes('template') || message.toLowerCase().includes('state') ? 400 : 500;
+      res.status(status).json({ error: message });
     }
   });
 
