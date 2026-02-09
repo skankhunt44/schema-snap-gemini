@@ -835,6 +835,9 @@ export default function App() {
               element={
                 <Relationships
                   snapshot={snapshot}
+                  templates={templates}
+                  activeTemplateId={activeTemplateId}
+                  onSelectTemplate={setActiveTemplateId}
                   template={activeTemplate}
                   mappings={mappingEntries}
                   sourceFields={sourceFields}

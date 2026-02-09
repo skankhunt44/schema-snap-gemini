@@ -12,6 +12,9 @@ type SourceField = {
 
 type Props = {
   snapshot: SchemaSnapshot | null;
+  templates: Template[];
+  activeTemplateId: string | null;
+  onSelectTemplate: (id: string | null) => void;
   template: Template | null;
   mappings: Record<string, MappingEntry>;
   sourceFields: SourceField[];
@@ -19,7 +22,17 @@ type Props = {
   onExportSql: () => void;
 };
 
-const Relationships: React.FC<Props> = ({ snapshot, template, mappings, sourceFields, onExportJson, onExportSql }) => {
+const Relationships: React.FC<Props> = ({
+  snapshot,
+  templates,
+  activeTemplateId,
+  onSelectTemplate,
+  template,
+  mappings,
+  sourceFields,
+  onExportJson,
+  onExportSql
+}) => {
   const [explainLoading, setExplainLoading] = React.useState(false);
   const [explainError, setExplainError] = React.useState<string | null>(null);
   const [explainData, setExplainData] = React.useState<
@@ -83,7 +96,17 @@ const Relationships: React.FC<Props> = ({ snapshot, template, mappings, sourceFi
 
       <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm mb-6">
         <div className="flex flex-col md:flex-row gap-3 mb-4 items-center justify-between">
-          <div className="flex flex-col md:flex-row gap-3">
+          <div className="flex flex-col md:flex-row gap-3 w-full md:w-auto">
+            <select
+              value={activeTemplateId ?? ''}
+              onChange={(e) => onSelectTemplate(e.target.value || null)}
+              className="px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white text-slate-900 min-w-[220px]"
+            >
+              <option value="">Select template</option>
+              {templates.map(t => (
+                <option key={t.id} value={t.id}>{t.name}</option>
+              ))}
+            </select>
             <button onClick={onExportJson} className="bg-slate-900 text-white rounded-lg py-2 px-4 hover:bg-slate-800">
               Export JSON Snapshot
             </button>
