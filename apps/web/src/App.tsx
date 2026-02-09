@@ -101,6 +101,124 @@ export default function App() {
     return sql + ';';
   };
 
+  const isMissing = (value: unknown) => value === null || value === undefined || String(value).trim() === '';
+  const isIdColumn = (name: string) => /(^id$|_id$|id$)/i.test(name);
+
+  const median = (values: number[]) => {
+    if (!values.length) return 0;
+    const sorted = [...values].sort((a, b) => a - b);
+    const mid = Math.floor(sorted.length / 2);
+    return sorted.length % 2 === 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid];
+  };
+
+  const mode = (values: string[]) => {
+    if (!values.length) return '';
+    const counts = new Map<string, number>();
+    values.forEach(value => counts.set(value, (counts.get(value) || 0) + 1));
+    let best = values[0];
+    let bestCount = 0;
+    counts.forEach((count, value) => {
+      if (count > bestCount) {
+        best = value;
+        bestCount = count;
+      }
+    });
+    return best;
+  };
+
+  const computeColumnStats = (name: string, dataType: string, rows: Record<string, unknown>[]) => {
+    const values = rows.map(row => row[name]);
+    const cleaned = values.map(value => (value === null || value === undefined ? '' : String(value).trim())).filter(Boolean);
+    const total = values.length || 1;
+    const nullRatio = (values.length - cleaned.length) / total;
+    const unique = new Set(cleaned);
+    const uniqueRatio = cleaned.length ? unique.size / cleaned.length : 0;
+    const sampleValues = Array.from(unique)
+      .slice(0, 5)
+      .map(value => (dataType === 'number' || dataType === 'currency' ? Number(value) : value));
+
+    return { nullRatio, uniqueRatio, sampleValues };
+  };
+
+  const applyAutoFixToTable = (table: TableSchema): TableSchema => {
+    if (!table.sampleRows?.length) return table;
+    const rows = table.sampleRows;
+    const fillValues: Record<string, string | number> = {};
+
+    table.columns.forEach(column => {
+      const values = rows.map(row => row[column.name]).filter(value => !isMissing(value));
+      if (column.dataType === 'number' || column.dataType === 'currency') {
+        const numeric = values.map(value => Number(value)).filter(value => !Number.isNaN(value));
+        fillValues[column.name] = median(numeric);
+      } else if (column.dataType === 'date') {
+        const valid = values.map(value => String(value)).filter(value => !Number.isNaN(new Date(value).valueOf()));
+        fillValues[column.name] = mode(valid);
+      } else if (column.dataType === 'boolean') {
+        const normalized = values.map(value => String(value).toLowerCase());
+        fillValues[column.name] = mode(normalized);
+      } else {
+        fillValues[column.name] = mode(values.map(value => String(value)));
+      }
+    });
+
+    const idColumns = table.columns.filter(column => isIdColumn(column.name)).map(column => column.name);
+    const seen = new Set<string>();
+
+    const cleanedRows = rows.reduce<Record<string, unknown>[]>((acc, row) => {
+      const next: Record<string, unknown> = { ...row };
+      table.columns.forEach(column => {
+        const value = row[column.name];
+        if (isMissing(value)) {
+          next[column.name] = fillValues[column.name];
+          return;
+        }
+
+        if (column.dataType === 'number' || column.dataType === 'currency') {
+          const num = Number(value);
+          next[column.name] = Number.isNaN(num) ? fillValues[column.name] : num;
+          return;
+        }
+
+        if (column.dataType === 'date') {
+          const dateVal = new Date(String(value));
+          next[column.name] = Number.isNaN(dateVal.valueOf()) ? fillValues[column.name] : value;
+        }
+      });
+
+      if (idColumns.length) {
+        const keyParts = idColumns.map(column => String(next[column] ?? '')).filter(Boolean);
+        if (!keyParts.length) return acc;
+        const key = keyParts.join('|');
+        if (seen.has(key)) return acc;
+        seen.add(key);
+      }
+
+      acc.push(next);
+      return acc;
+    }, []);
+
+    const updatedColumns = table.columns.map(column => ({
+      ...column,
+      ...computeColumnStats(column.name, column.dataType, cleanedRows)
+    }));
+
+    return {
+      ...table,
+      columns: updatedColumns,
+      sampleRows: cleanedRows,
+      rowCount: cleanedRows.length
+    };
+  };
+
+  const applyAutoFixToSnapshot = (tableName: string) => {
+    if (!snapshot) return;
+    const tables = snapshot.tables.map(table => {
+      if (table.name !== tableName) return table;
+      return applyAutoFixToTable(table);
+    });
+    setSnapshot({ ...snapshot, tables });
+  };
+
   const buildSourceFields = (data: SchemaSnapshot, sourceId?: string, sourceName?: string): SourceField[] => {
     return data.tables.flatMap(table =>
       table.columns.map(col => ({
@@ -534,6 +652,7 @@ export default function App() {
                   onDbIngest={(name, dbType, connectionString) => handleIngest(dbType, name, () => ingestDB(dbType, connectionString))}
                   onSQLiteIngest={(name, file) => handleIngest('SQLite', name, () => ingestSQLite(file))}
                   onRemoveSource={(id) => setDataSources(prev => prev.filter(ds => ds.id !== id))}
+                  onApplyFix={applyAutoFixToSnapshot}
                 />
               }
             />

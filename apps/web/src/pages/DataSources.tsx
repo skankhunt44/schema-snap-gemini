@@ -23,6 +23,7 @@ type Props = {
   onDbIngest: (name: string, dbType: string, connectionString: string) => Promise<boolean> | boolean;
   onSQLiteIngest: (name: string, file: File) => Promise<boolean> | boolean;
   onRemoveSource: (id: string) => void;
+  onApplyFix: (tableName: string) => void;
 };
 
 const DataSources: React.FC<Props> = ({
@@ -34,7 +35,8 @@ const DataSources: React.FC<Props> = ({
   onDDLIngest,
   onDbIngest,
   onSQLiteIngest,
-  onRemoveSource
+  onRemoveSource,
+  onApplyFix
 }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<'csv' | 'db' | 'ddl' | 'sqlite'>('csv');
@@ -232,8 +234,15 @@ const DataSources: React.FC<Props> = ({
                     <h3 className="font-semibold text-slate-900">{table.name}</h3>
                     <p className="text-xs text-slate-500">{table.columns.length} columns • {table.rowCount ?? '—'} rows sampled</p>
                   </div>
-                  <div className="text-xs text-slate-400">
-                    Auto-fix on upload will resolve these issues.
+                  <div className="flex items-center gap-3">
+                    <span className="text-xs text-slate-400">Fix uses sampled rows only.</span>
+                    <button
+                      onClick={() => onApplyFix(table.name)}
+                      className="px-3 py-2 text-xs bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50"
+                      disabled={!table.sampleRows?.length}
+                    >
+                      Fix Now
+                    </button>
                   </div>
                 </div>
 
