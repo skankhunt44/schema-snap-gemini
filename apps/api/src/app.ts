@@ -220,7 +220,7 @@ export const createApp = () => {
   app.get('/api/samples', async (_req, res) => {
     try {
       const tables = loadSampleTables();
-      const relationships = await inferRelationships(tables, process.env.GEMINI_API_KEY);
+      const relationships = await inferRelationships(tables);
       const snapshot: SchemaSnapshot = { tables, relationships };
       res.json(snapshot);
     } catch (err: any) {
