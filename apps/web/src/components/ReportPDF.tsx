@@ -153,6 +153,14 @@ const ReportPDF: React.FC<{ report: ReportEntry }> = ({ report }) => {
           </View>
         </View>
 
+        {(report.period || report.dataFreshness) && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Report Scope</Text>
+            {report.period && <Text style={styles.text}>Reporting period: {report.period}</Text>}
+            {report.dataFreshness && <Text style={styles.text}>Data freshness: {report.dataFreshness}</Text>}
+          </View>
+        )}
+
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Executive Summary</Text>
           <Text style={styles.text}>{report.narrative || 'No narrative generated.'}</Text>
@@ -176,9 +184,21 @@ const ReportPDF: React.FC<{ report: ReportEntry }> = ({ report }) => {
                   <Text style={styles.kpiLabel}>{kpi.label}</Text>
                   <Text style={styles.kpiValue}>{String(kpi.value)}</Text>
                   {kpi.detail ? <Text style={styles.kpiLabel}>{kpi.detail}</Text> : null}
+                  {kpi.definition ? <Text style={styles.kpiLabel}>Definition: {kpi.definition}</Text> : null}
+                  {kpi.variance ? <Text style={styles.kpiLabel}>Variance: {kpi.variance}</Text> : null}
                 </View>
               ))}
             </View>
+          </View>
+        )}
+
+        {report.variance && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Variance vs Prior Period</Text>
+            <Text style={styles.text}>
+              {report.variance.label}: {report.variance.current.toFixed(2)} vs {report.variance.previous.toFixed(2)}
+              {' '}({report.variance.deltaPct.toFixed(1)}%)
+            </Text>
           </View>
         )}
 
@@ -191,9 +211,18 @@ const ReportPDF: React.FC<{ report: ReportEntry }> = ({ report }) => {
           </View>
         )}
 
+        {report.exceptions && report.exceptions.length > 0 && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Exceptions & Anomalies</Text>
+            {report.exceptions.map((item, idx) => (
+              <Text key={idx} style={styles.text}>• {item}</Text>
+            ))}
+          </View>
+        )}
+
         {report.joinPaths && report.joinPaths.length > 0 && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Join Paths</Text>
+            <Text style={styles.sectionTitle}>Lineage & Join Paths</Text>
             {report.joinPaths.map((path, idx) => (
               <Text key={idx} style={styles.text}>{path.title}: {path.path.join(' → ')}</Text>
             ))}

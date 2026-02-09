@@ -889,7 +889,7 @@ export default function App() {
   };
 
   const computeReportKpis = (columns: string[], rows: Record<string, unknown>[]) => {
-    const kpis: { label: string; value: string | number; detail?: string }[] = [];
+    const kpis: { label: string; value: string | number; detail?: string; definition?: string; variance?: string }[] = [];
     kpis.push({ label: 'Rows', value: rows.length });
 
     const numericColumns = columns.filter(col =>
@@ -941,6 +941,122 @@ export default function App() {
     return totalCells ? missingCells / totalCells : 0;
   };
 
+  const parseDateValue = (value: unknown) => {
+    if (!value) return null;
+    const date = new Date(String(value));
+    return Number.isNaN(date.valueOf()) ? null : date;
+  };
+
+  const pickDateColumn = (columns: string[], rows: Record<string, unknown>[]) => {
+    const candidates = columns.filter(col => /(date|month|period|time)/i.test(col));
+    if (!candidates.length) return null;
+    let best: { column: string; count: number } | null = null;
+    candidates.forEach(col => {
+      const count = rows.reduce((acc, row) => (parseDateValue(row[col]) ? acc + 1 : acc), 0);
+      if (!best || count > best.count) best = { column: col, count };
+    });
+    return best?.column || null;
+  };
+
+  const computePeriod = (columns: string[], rows: Record<string, unknown>[]) => {
+    const dateColumn = pickDateColumn(columns, rows);
+    if (!dateColumn) return { period: 'Current period', dateColumn: null, maxDate: null };
+    const dates = rows.map(row => parseDateValue(row[dateColumn])).filter(Boolean) as Date[];
+    if (!dates.length) return { period: 'Current period', dateColumn, maxDate: null };
+    const min = new Date(Math.min(...dates.map(d => d.getTime())));
+    const max = new Date(Math.max(...dates.map(d => d.getTime())));
+    return { period: `${min.toLocaleDateString()} – ${max.toLocaleDateString()}`, dateColumn, maxDate: max };
+  };
+
+  const computeVariance = (rows: Record<string, unknown>[], dateColumn: string | null, targetColumn: string | null) => {
+    if (!dateColumn || !targetColumn) return null;
+    const dated = rows
+      .map(row => ({ date: parseDateValue(row[dateColumn]), value: Number(row[targetColumn]) || 0 }))
+      .filter(entry => entry.date);
+    if (!dated.length) return null;
+    const maxDate = new Date(Math.max(...dated.map(d => (d.date as Date).getTime())));
+    const currentStart = new Date(maxDate);
+    currentStart.setDate(currentStart.getDate() - 30);
+    const prevStart = new Date(currentStart);
+    prevStart.setDate(prevStart.getDate() - 30);
+
+    const sumForWindow = (start: Date, end: Date) =>
+      dated
+        .filter(entry => (entry.date as Date) >= start && (entry.date as Date) <= end)
+        .reduce((acc, entry) => acc + entry.value, 0);
+
+    const current = sumForWindow(currentStart, maxDate);
+    const previous = sumForWindow(prevStart, currentStart);
+    if (previous === 0) return null;
+    const deltaPct = ((current - previous) / previous) * 100;
+    return { label: targetColumn, current, previous, deltaPct };
+  };
+
+  const computeExceptions = (columns: string[], rows: Record<string, unknown>[]) => {
+    const exceptions: string[] = [];
+    const keyColumns = columns.filter(col => /(id|amount|date|email|country|program)/i.test(col));
+
+    keyColumns.forEach(col => {
+      const missingCount = rows.filter(row => isMissing(row[col])).length;
+      if (missingCount > 0) {
+        exceptions.push(`Missing ${col}: ${missingCount} rows`);
+      }
+    });
+
+    const numericColumns = columns.filter(col =>
+      rows.some(row => typeof row[col] === 'number' && !Number.isNaN(row[col] as number))
+    );
+
+    const quantile = (values: number[], q: number) => {
+      if (!values.length) return 0;
+      const sorted = [...values].sort((a, b) => a - b);
+      const pos = (sorted.length - 1) * q;
+      const base = Math.floor(pos);
+      const rest = pos - base;
+      if (sorted[base + 1] !== undefined) {
+        return sorted[base] + rest * (sorted[base + 1] - sorted[base]);
+      }
+      return sorted[base];
+    };
+
+    numericColumns.forEach(col => {
+      const values = rows.map(row => Number(row[col])).filter(val => !Number.isNaN(val));
+      if (values.length < 6) return;
+      const q1 = quantile(values, 0.25);
+      const q3 = quantile(values, 0.75);
+      const iqr = q3 - q1;
+      if (!iqr) return;
+      const lower = q1 - 1.5 * iqr;
+      const upper = q3 + 1.5 * iqr;
+      const outliers = values.filter(val => val < lower || val > upper).length;
+      if (outliers > 0) {
+        exceptions.push(`Outliers in ${col}: ${outliers} rows outside ${lower.toFixed(2)}–${upper.toFixed(2)}`);
+      }
+    });
+
+    keyColumns.forEach(col => {
+      if (!/id$/i.test(col)) return;
+      const values = rows.map(row => row[col]).filter(val => !isMissing(val));
+      if (!values.length) return;
+      const unique = new Set(values.map(val => String(val)));
+      const ratio = unique.size / values.length;
+      if (ratio < 0.9) {
+        exceptions.push(`Duplicate ${col}: unique ratio ${(ratio * 100).toFixed(1)}%`);
+      }
+    });
+
+    return exceptions.slice(0, 5);
+  };
+
+  const computeDataFreshness = () => {
+    const dates = dataSources
+      .map(source => new Date(source.lastSync))
+      .filter(date => !Number.isNaN(date.valueOf()));
+    if (!dates.length) return new Date().toLocaleString();
+    const latest = new Date(Math.max(...dates.map(d => d.getTime())));
+    return latest.toLocaleString();
+  };
+
   const generateReport = async (templateId: string) => {
     const template = templates.find(t => t.id === templateId);
     if (!template) return;
@@ -953,8 +1069,40 @@ export default function App() {
     const columns = reportPayload?.columns || [];
     const rows = reportPayload?.rows || [];
 
-    const kpis = computeReportKpis(columns, rows);
+    const periodInfo = computePeriod(columns, rows);
+    const dataFreshness = computeDataFreshness();
     const missingRatio = computeMissingRatio(columns, rows);
+    const exceptions = computeExceptions(columns, rows);
+
+    const mapping = mappingByTemplate[templateId] || {};
+    const definitionMap = new Map<string, string>();
+    template.fields.forEach(field => {
+      const entry = mapping[field.id];
+      if (!entry?.sourceFieldId) return;
+      const operation = (entry.operation || 'DIRECT').toUpperCase();
+      const definition = operation === 'DIRECT'
+        ? `DIRECT ${entry.sourceFieldId}`
+        : `${operation}(${entry.sourceFieldId})`;
+      definitionMap.set(field.name.toLowerCase(), definition);
+    });
+
+    const kpis = computeReportKpis(columns, rows).map(kpi => ({
+      ...kpi,
+      definition: definitionMap.get(kpi.label.toLowerCase()) || kpi.definition
+    }));
+
+    const pickColumnByKeyword = (keywords: string[]) =>
+      columns.find(col => keywords.some(keyword => col.toLowerCase().includes(keyword)));
+    const totalColumn = pickColumnByKeyword(['total', 'amount', 'budget']);
+    const variance = computeVariance(rows, periodInfo.dateColumn, totalColumn || null);
+
+    if (variance) {
+      kpis.forEach(kpi => {
+        if (totalColumn && kpi.label.toLowerCase() === totalColumn.toLowerCase()) {
+          kpi.variance = `${variance.deltaPct.toFixed(1)}% vs prior period`;
+        }
+      });
+    }
 
     let narrative = '';
     let highlights: string[] = [];
@@ -979,10 +1127,14 @@ export default function App() {
       stakeholder: template.stakeholder,
       dateGenerated: new Date().toLocaleDateString(),
       status: 'Draft',
+      period: periodInfo.period,
+      dataFreshness,
       narrative,
       highlights,
       kpis,
+      variance: variance || undefined,
       dataQuality: { missingRatio, totalRows: rows.length },
+      exceptions,
       joinPaths: aiArtifacts.joinPaths || [],
       preview: { columns, rows: rows.slice(0, 8) }
     };

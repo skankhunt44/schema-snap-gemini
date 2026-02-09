@@ -67,6 +67,8 @@ export type ReportKpi = {
   label: string;
   value: string | number;
   detail?: string;
+  definition?: string;
+  variance?: string;
 };
 
 export type ReportEntry = {
@@ -76,13 +78,17 @@ export type ReportEntry = {
   stakeholder: string;
   dateGenerated: string;
   status: ReportStatus;
+  period?: string;
+  dataFreshness?: string;
   narrative?: string;
   highlights?: string[];
   kpis?: ReportKpi[];
+  variance?: { label: string; current: number; previous: number; deltaPct: number };
   dataQuality?: {
     missingRatio: number;
     totalRows: number;
   };
+  exceptions?: string[];
   joinPaths?: Array<{ title: string; path: string[]; rationale: string }>;
   preview?: { columns: string[]; rows: Record<string, unknown>[] };
 };

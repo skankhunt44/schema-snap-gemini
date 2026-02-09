@@ -60,12 +60,16 @@ const Reports: React.FC<Props> = ({ templates, reports, onGenerateReport, onPubl
         <body>
           <h1>${report.templateName}</h1>
           <p>Stakeholder: ${report.stakeholder} • Date: ${report.dateGenerated}</p>
+          ${report.period ? `<p>Reporting period: ${report.period}</p>` : ''}
+          ${report.dataFreshness ? `<p>Data freshness: ${report.dataFreshness}</p>` : ''}
           <h2>Executive Summary</h2>
           <p>${report.narrative || ''}</p>
           ${report.highlights?.length ? `<h2>Highlights</h2><ul>${report.highlights.map(h => `<li>${h}</li>`).join('')}</ul>` : ''}
-          ${report.kpis?.length ? `<h2>Key Metrics</h2><div class="kpis">${report.kpis.map(k => `<div class="card"><div>${k.label}</div><strong>${k.value}</strong><div>${k.detail || ''}</div></div>`).join('')}</div>` : ''}
+          ${report.kpis?.length ? `<h2>Key Metrics</h2><div class="kpis">${report.kpis.map(k => `<div class="card"><div>${k.label}</div><strong>${k.value}</strong><div>${k.detail || ''}</div><div>${k.definition || ''}</div><div>${k.variance || ''}</div></div>`).join('')}</div>` : ''}
+          ${report.variance ? `<h2>Variance vs Prior Period</h2><p>${report.variance.label}: ${report.variance.current.toFixed(2)} vs ${report.variance.previous.toFixed(2)} (${report.variance.deltaPct.toFixed(1)}%)</p>` : ''}
           ${report.dataQuality ? `<h2>Data Quality</h2><p>Missing values rate: ${(report.dataQuality.missingRatio * 100).toFixed(1)}% • Rows: ${report.dataQuality.totalRows}</p>` : ''}
-          ${report.joinPaths?.length ? `<h2>Join Paths</h2><ul>${report.joinPaths.map(j => `<li><strong>${j.title}:</strong> ${j.path.join(' → ')}</li>`).join('')}</ul>` : ''}
+          ${report.exceptions?.length ? `<h2>Exceptions & Anomalies</h2><ul>${report.exceptions.map(item => `<li>${item}</li>`).join('')}</ul>` : ''}
+          ${report.joinPaths?.length ? `<h2>Lineage & Join Paths</h2><ul>${report.joinPaths.map(j => `<li><strong>${j.title}:</strong> ${j.path.join(' → ')}</li>`).join('')}</ul>` : ''}
           ${rowsHtml ? `<h2>Appendix (Sample Rows)</h2><table><thead><tr>${report.preview?.columns?.slice(0, 6).map(col => `<th>${col}</th>`).join('')}</tr></thead><tbody>${rowsHtml}</tbody></table>` : ''}
         </body>
       </html>
@@ -173,6 +177,18 @@ const Reports: React.FC<Props> = ({ templates, reports, onGenerateReport, onPubl
                 </div>
               </div>
 
+              {(activeReport.period || activeReport.dataFreshness) && (
+                <div>
+                  <h3 className="text-sm font-semibold text-slate-900 mb-1">Report Scope</h3>
+                  {activeReport.period && (
+                    <p className="text-sm text-slate-600">Reporting period: {activeReport.period}</p>
+                  )}
+                  {activeReport.dataFreshness && (
+                    <p className="text-sm text-slate-600">Data freshness: {activeReport.dataFreshness}</p>
+                  )}
+                </div>
+              )}
+
               {activeReport.narrative && (
                 <div>
                   <h3 className="text-sm font-semibold text-slate-900 mb-1">Executive Summary</h3>
@@ -200,9 +216,21 @@ const Reports: React.FC<Props> = ({ templates, reports, onGenerateReport, onPubl
                         <div className="text-xs text-slate-400 uppercase">{kpi.label}</div>
                         <div className="text-lg font-semibold text-slate-900">{kpi.value}</div>
                         {kpi.detail && <div className="text-xs text-slate-500">{kpi.detail}</div>}
+                        {kpi.definition && <div className="text-xs text-slate-500">Definition: {kpi.definition}</div>}
+                        {kpi.variance && <div className="text-xs text-indigo-600">Variance: {kpi.variance}</div>}
                       </div>
                     ))}
                   </div>
+                </div>
+              )}
+
+              {activeReport.variance && (
+                <div>
+                  <h3 className="text-sm font-semibold text-slate-900 mb-1">Variance vs Prior Period</h3>
+                  <p className="text-sm text-slate-600">
+                    {activeReport.variance.label}: {activeReport.variance.current.toFixed(2)} vs {activeReport.variance.previous.toFixed(2)}
+                    {' '}({activeReport.variance.deltaPct.toFixed(1)}%)
+                  </p>
                 </div>
               )}
 
@@ -213,9 +241,20 @@ const Reports: React.FC<Props> = ({ templates, reports, onGenerateReport, onPubl
                 </div>
               )}
 
+              {activeReport.exceptions && activeReport.exceptions.length > 0 && (
+                <div>
+                  <h3 className="text-sm font-semibold text-slate-900 mb-1">Exceptions & Anomalies</h3>
+                  <ul className="text-sm text-slate-600 list-disc list-inside">
+                    {activeReport.exceptions.map((item, idx) => (
+                      <li key={idx}>{item}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
               {activeReport.joinPaths && activeReport.joinPaths.length > 0 && (
                 <div>
-                  <h3 className="text-sm font-semibold text-slate-900 mb-1">Join Paths</h3>
+                  <h3 className="text-sm font-semibold text-slate-900 mb-1">Lineage & Join Paths</h3>
                   <ul className="text-sm text-slate-600 list-disc list-inside">
                     {activeReport.joinPaths.map((path, idx) => (
                       <li key={idx}><span className="font-semibold">{path.title}:</span> {path.path.join(' → ')}</li>
