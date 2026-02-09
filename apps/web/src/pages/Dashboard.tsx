@@ -1,6 +1,7 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { Database, Share2, Wand2, FileText } from 'lucide-react';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as ReTooltip, ResponsiveContainer } from 'recharts';
 import { DataSource, SchemaSnapshot, Template } from '../types';
 
 const StatCard: React.FC<{ title: string; value: string | number; sub: string; icon: React.ReactNode; color: string }> = ({
@@ -22,18 +23,34 @@ const StatCard: React.FC<{ title: string; value: string | number; sub: string; i
   </div>
 );
 
+type TemplateCoverage = {
+  id: string;
+  name: string;
+  mapped: number;
+  total: number;
+  percent: number;
+};
+
 const Dashboard: React.FC<{
   snapshot: SchemaSnapshot | null;
   templates: Template[];
   dataSources: DataSource[];
   mappedCount: number;
   totalMapped: number;
+  templateCoverage: TemplateCoverage[];
   onLoadSample: () => void;
-}> = ({ snapshot, templates, dataSources, mappedCount, totalMapped, onLoadSample }) => {
+}> = ({ snapshot, templates, dataSources, mappedCount, totalMapped, templateCoverage, onLoadSample }) => {
   const tableCount = snapshot?.tables.length ?? 0;
   const columnCount = snapshot?.tables.reduce((acc, t) => acc + t.columns.length, 0) ?? 0;
   const relationships = snapshot?.relationships.length ?? 0;
   const totalFields = templates.reduce((acc, t) => acc + t.fields.length, 0);
+  const mappedTemplates = templateCoverage.filter(template => template.mapped > 0);
+  const chartData = mappedTemplates.map(template => ({
+    name: template.name.length > 16 ? `${template.name.slice(0, 16)}…` : template.name,
+    percent: template.percent,
+    mapped: template.mapped,
+    total: template.total
+  }));
 
   return (
     <div className="p-6">
@@ -71,6 +88,39 @@ const Dashboard: React.FC<{
           icon={<Wand2 className="text-violet-600" />}
           color="bg-violet-600"
         />
+      </div>
+
+      <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm mb-8">
+        <div className="flex justify-between items-center mb-6">
+          <div>
+            <h3 className="text-lg font-semibold text-slate-900">Mapping Coverage</h3>
+            <p className="text-sm text-slate-500">Templates with at least one mapped field.</p>
+          </div>
+          <span className="text-xs text-slate-500 bg-slate-100 px-2 py-1 rounded">Live</span>
+        </div>
+        {chartData.length === 0 ? (
+          <div className="text-sm text-slate-400">Map at least one field to see coverage trends.</div>
+        ) : (
+          <div className="h-64">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={chartData} margin={{ left: 8, right: 8 }}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 12 }} />
+                <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 12 }} domain={[0, 100]} />
+                <ReTooltip
+                  formatter={(value: number, _name: string, props: any) => {
+                    const payload = props?.payload as { mapped?: number; total?: number };
+                    if (!payload) return [`${value}%`, 'Coverage'];
+                    return [`${value}% (${payload.mapped ?? 0}/${payload.total ?? 0})`, 'Coverage'];
+                  }}
+                  contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+                  labelStyle={{ color: '#64748b', marginBottom: '0.25rem' }}
+                />
+                <Bar dataKey="percent" fill="#4f46e5" radius={[6, 6, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        )}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">

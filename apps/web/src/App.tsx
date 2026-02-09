@@ -662,6 +662,7 @@ export default function App() {
                   dataSources={dataSources}
                   mappedCount={mappedCount}
                   totalMapped={totalMapped}
+                  templateCoverage={templateCoverage}
                   onLoadSample={loadSampleData}
                 />
               }
