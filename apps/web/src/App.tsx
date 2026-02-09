@@ -68,6 +68,27 @@ export default function App() {
     return 1 - dist / maxLen;
   };
 
+  const mergeSnapshots = (current: SchemaSnapshot | null, incoming: SchemaSnapshot): SchemaSnapshot => {
+    if (!current) return incoming;
+
+    const tableMap = new Map(current.tables.map(table => [table.name, table]));
+    incoming.tables.forEach(table => tableMap.set(table.name, table));
+    const tables = Array.from(tableMap.values());
+
+    const relKey = (rel: Relationship) =>
+      `${rel.from.table}.${rel.from.column}->${rel.to.table}.${rel.to.column}:${rel.type}`;
+    const relMap = new Map(current.relationships.map(rel => [relKey(rel), rel]));
+    incoming.relationships.forEach(rel => {
+      const key = relKey(rel);
+      const existing = relMap.get(key);
+      if (!existing || (existing.confidence ?? 0) < (rel.confidence ?? 0)) {
+        relMap.set(key, rel);
+      }
+    });
+
+    return { tables, relationships: Array.from(relMap.values()) };
+  };
+
   const buildJoinPlan = (data: SchemaSnapshot) => {
     if (!data.tables.length) return '-- No tables detected';
     const rels = [...data.relationships].sort((a, b) => b.confidence - a.confidence);
@@ -590,7 +611,7 @@ export default function App() {
       setError(null);
       setLoading(true);
       const data = await action();
-      setSnapshot(data);
+      setSnapshot(prev => mergeSnapshots(prev, data));
       setSelectedRel(null);
       setDataSources(prev => [buildDataSourceEntry(name, type, data), ...prev]);
       return true;
