@@ -63,6 +63,12 @@ export type MappingEntry = {
 
 export type ReportStatus = 'Draft' | 'Published';
 
+export type ReportKpi = {
+  label: string;
+  value: string | number;
+  detail?: string;
+};
+
 export type ReportEntry = {
   id: string;
   templateId: string;
@@ -70,6 +76,15 @@ export type ReportEntry = {
   stakeholder: string;
   dateGenerated: string;
   status: ReportStatus;
+  narrative?: string;
+  highlights?: string[];
+  kpis?: ReportKpi[];
+  dataQuality?: {
+    missingRatio: number;
+    totalRows: number;
+  };
+  joinPaths?: Array<{ title: string; path: string[]; rationale: string }>;
+  preview?: { columns: string[]; rows: Record<string, unknown>[] };
 };
 
 export type SourceField = {

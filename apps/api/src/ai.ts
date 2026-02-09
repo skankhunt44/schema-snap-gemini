@@ -229,3 +229,46 @@ Focus on outliers and missing data fixes.
   if (!text) return { summary: '', suggestions: [] };
   return JSON.parse(cleanJson(text));
 };
+
+export const generateReportNarrative = async (payload: {
+  templateName: string;
+  stakeholder: string;
+  metrics: Array<{ label: string; value: string | number }>;
+  dataQuality?: { missingRatio: number; totalRows: number };
+  joinPaths?: Array<{ title: string; path: string[] }>;
+  highlights?: string[];
+}, apiKey: string) => {
+  const ai = new GoogleGenAI({ apiKey });
+  const prompt = `
+You are an executive reporting analyst. Write a concise executive summary and 3 highlights for the report.
+Template: ${payload.templateName}
+Stakeholder: ${payload.stakeholder}
+Metrics: ${JSON.stringify(payload.metrics)}
+Data quality: ${JSON.stringify(payload.dataQuality || {})}
+Join paths: ${JSON.stringify(payload.joinPaths || [])}
+
+Return JSON with:
+- narrative: 3-5 sentences
+- highlights: array of 3 bullet points
+`;
+
+  const response = await ai.models.generateContent({
+    model: MODEL,
+    contents: prompt,
+    config: {
+      responseMimeType: 'application/json',
+      responseSchema: {
+        type: Type.OBJECT,
+        properties: {
+          narrative: { type: Type.STRING },
+          highlights: { type: Type.ARRAY, items: { type: Type.STRING } }
+        },
+        required: ['narrative', 'highlights']
+      }
+    }
+  });
+
+  const text = response.text || '';
+  if (!text) return { narrative: '', highlights: [] };
+  return JSON.parse(cleanJson(text));
+};

@@ -90,6 +90,23 @@ export const suggestFixes = async (tableName: string) => {
   return res.json() as Promise<{ summary: string; suggestions: Array<{ issue: string; fix: string; rationale?: string }> }>;
 };
 
+export const generateReportNarrative = async (payload: {
+  templateName: string;
+  stakeholder: string;
+  metrics: Array<{ label: string; value: string | number }>;
+  dataQuality?: { missingRatio: number; totalRows: number };
+  joinPaths?: Array<{ title: string; path: string[] }>;
+  highlights?: string[];
+}) => {
+  const res = await fetch('/api/ai/report-narrative', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json() as Promise<{ narrative: string; highlights: string[] }>;
+};
+
 export const loadSampleSnapshot = async (): Promise<SchemaSnapshot> => {
   const res = await fetch('/api/samples');
   if (!res.ok) throw new Error(await res.text());

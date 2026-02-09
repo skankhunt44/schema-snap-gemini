@@ -11,8 +11,10 @@ const Sidebar: React.FC = () => {
     { to: '/templates', icon: <FileText size={20} />, label: 'Templates' },
     { to: '/map', icon: <Wand2 size={20} />, label: 'Smart Mapper' },
     { to: '/relationships', icon: <Share2 size={20} />, label: 'Relationships' },
+    { to: '/reports', icon: <FileText size={20} />, label: 'Reports' },
+    { to: '/data-products', icon: <Database size={20} />, label: 'Data Products' },
     { to: '/schedule', icon: <Clock size={20} />, label: 'Schedule' },
-    { to: '/analytics', icon: <BarChart3 size={20} />, label: 'Analytics' }
+    { to: '/analytics', icon: <BarChart3 size={20} />, label: 'AI Insights' }
   ];
 
   const toggleSidebar = () => setIsOpen(!isOpen);

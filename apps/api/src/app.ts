@@ -7,7 +7,7 @@ import { ingestDDL } from './ingest/ddl';
 import { ingestMySQL, ingestPostgres, ingestSQLite } from './ingest/db';
 import { inferRelationships } from './infer';
 import { suggestMappingsGemini } from './map/suggest';
-import { explainSchemaGemini, generateTemplateGemini, suggestFixesGemini } from './ai';
+import { explainSchemaGemini, generateTemplateGemini, suggestFixesGemini, generateReportNarrative } from './ai';
 import { loadSampleTables } from './samples';
 import { readState, writeState } from './store';
 import { buildCombinedOutput, buildCombinedWorkbook } from './output';
@@ -198,6 +198,22 @@ export const createApp = () => {
       res.json(result);
     } catch (err: any) {
       res.status(500).json({ error: err.message || 'Fix suggestions failed' });
+    }
+  });
+
+  app.post('/api/ai/report-narrative', async (req, res) => {
+    try {
+      const apiKey = process.env.GEMINI_API_KEY;
+      if (!apiKey) return res.status(400).json({ error: 'GEMINI_API_KEY not configured on server' });
+      const payload = req.body || {};
+      if (!payload.templateName || !payload.stakeholder || !payload.metrics) {
+        return res.status(400).json({ error: 'templateName, stakeholder, metrics required' });
+      }
+
+      const result = await generateReportNarrative(payload, apiKey);
+      res.json(result);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || 'Report narrative failed' });
     }
   });
 

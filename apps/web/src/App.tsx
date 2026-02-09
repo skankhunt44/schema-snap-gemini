@@ -1,6 +1,6 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { ingestCsv, ingestDDL, ingestDB, ingestSQLite, getState, loadSampleSnapshot, saveState, suggestMappings, explainSchema, generateTemplate, suggestFixes } from './lib/api';
+import { ingestCsv, ingestDDL, ingestDB, ingestSQLite, getState, loadSampleSnapshot, saveState, suggestMappings, explainSchema, generateTemplate, suggestFixes, generateReportNarrative } from './lib/api';
 import { DataSource, GeminiArtifacts, MappingEntry, Relationship, ReportEntry, SchemaSnapshot, Template, TemplateField, SourceField, TableSchema } from './types';
 import Sidebar from './components/Sidebar';
 import Dashboard from './pages/Dashboard';
@@ -9,6 +9,8 @@ import Templates from './pages/Templates';
 import SmartMapper from './pages/SmartMapper';
 import Relationships from './pages/Relationships';
 import Analytics from './pages/Analytics';
+import DataProducts from './pages/DataProducts';
+import Reports from './pages/Reports';
 import Schedule from './pages/Schedule';
 import Settings from './pages/Settings';
 
@@ -859,33 +861,112 @@ export default function App() {
     template.fields.some(field => (field.required ?? true) && !mappingByTemplate[template.id]?.[field.id]?.sourceFieldId)
   ).length;
 
-  const createReportEntry = (templateId: string) => {
-    const template = templates.find(t => t.id === templateId);
-    if (!template) return null;
-    const report: ReportEntry = {
-      id: `rep_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
-      templateId: template.id,
-      templateName: template.name,
-      stakeholder: template.stakeholder,
-      dateGenerated: new Date().toLocaleDateString(),
-      status: 'Draft'
-    };
-    setReports(prev => [report, ...prev]);
-    return report;
-  };
-
   const publishReport = (reportId: string) => {
     setReports(prev =>
       prev.map(report => (report.id === reportId ? { ...report, status: 'Published' } : report))
     );
   };
 
-  const generateAndDownload = (templateId: string) => {
-    const mappingCount = mappedCountForTemplate(templateId);
-    if (!mappingCount) return;
-    createReportEntry(templateId);
-    const url = `/api/output?format=xlsx&templateId=${encodeURIComponent(templateId)}`;
-    window.location.href = url;
+  const computeReportKpis = (columns: string[], rows: Record<string, unknown>[]) => {
+    const kpis: { label: string; value: string | number; detail?: string }[] = [];
+    kpis.push({ label: 'Rows', value: rows.length });
+
+    const numericColumns = columns.filter(col =>
+      rows.some(row => typeof row[col] === 'number' && !Number.isNaN(row[col] as number))
+    );
+
+    const countForColumn = (col: string) => rows.filter(row => !isMissing(row[col])).length;
+    const sumForColumn = (col: string) =>
+      rows.reduce((acc, row) => acc + (Number(row[col]) || 0), 0);
+    const avgForColumn = (col: string) => {
+      const values = rows.map(row => Number(row[col])).filter(val => !Number.isNaN(val));
+      if (!values.length) return 0;
+      return values.reduce((acc, val) => acc + val, 0) / values.length;
+    };
+
+    const pickColumnByKeyword = (keywords: string[]) =>
+      columns.find(col => keywords.some(keyword => col.toLowerCase().includes(keyword)));
+
+    const countColumn = pickColumnByKeyword(['count', 'number']);
+    if (countColumn) {
+      kpis.push({ label: countColumn, value: countForColumn(countColumn), detail: 'Non-empty entries' });
+    }
+
+    const totalColumn = pickColumnByKeyword(['total', 'amount', 'budget']);
+    if (totalColumn && numericColumns.includes(totalColumn)) {
+      kpis.push({ label: totalColumn, value: sumForColumn(totalColumn) });
+    }
+
+    const avgColumn = pickColumnByKeyword(['average', 'avg']);
+    if (avgColumn && numericColumns.includes(avgColumn)) {
+      kpis.push({ label: avgColumn, value: avgForColumn(avgColumn) });
+    }
+
+    if (numericColumns.length && kpis.length < 4) {
+      const fallback = numericColumns[0];
+      kpis.push({ label: `Sum ${fallback}`, value: sumForColumn(fallback) });
+    }
+
+    return kpis.slice(0, 6);
+  };
+
+  const computeMissingRatio = (columns: string[], rows: Record<string, unknown>[]) => {
+    if (!columns.length || !rows.length) return 0;
+    const totalCells = columns.length * rows.length;
+    const missingCells = rows.reduce(
+      (acc, row) => acc + columns.filter(col => isMissing(row[col])).length,
+      0
+    );
+    return totalCells ? missingCells / totalCells : 0;
+  };
+
+  const generateReport = async (templateId: string) => {
+    const template = templates.find(t => t.id === templateId);
+    if (!template) return;
+    if (!mappedCountForTemplate(templateId)) return;
+
+    const outputRes = await fetch(`/api/output?format=json&templateId=${encodeURIComponent(templateId)}`);
+    if (!outputRes.ok) throw new Error('Failed to build report output');
+    const payload = await outputRes.json();
+    const reportPayload = payload.templates?.[0];
+    const columns = reportPayload?.columns || [];
+    const rows = reportPayload?.rows || [];
+
+    const kpis = computeReportKpis(columns, rows);
+    const missingRatio = computeMissingRatio(columns, rows);
+
+    let narrative = '';
+    let highlights: string[] = [];
+    try {
+      const narrativeResult = await generateReportNarrative({
+        templateName: template.name,
+        stakeholder: template.stakeholder,
+        metrics: kpis.map(k => ({ label: k.label, value: k.value })),
+        dataQuality: { missingRatio, totalRows: rows.length },
+        joinPaths: aiArtifacts.joinPaths || []
+      });
+      narrative = narrativeResult.narrative || '';
+      highlights = narrativeResult.highlights || [];
+    } catch {
+      narrative = `This report summarizes ${template.name} with ${rows.length} records analyzed.`;
+    }
+
+    const report: ReportEntry = {
+      id: `rep_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      templateId: template.id,
+      templateName: template.name,
+      stakeholder: template.stakeholder,
+      dateGenerated: new Date().toLocaleDateString(),
+      status: 'Draft',
+      narrative,
+      highlights,
+      kpis,
+      dataQuality: { missingRatio, totalRows: rows.length },
+      joinPaths: aiArtifacts.joinPaths || [],
+      preview: { columns, rows: rows.slice(0, 8) }
+    };
+
+    setReports(prev => [report, ...prev]);
   };
 
   const buildDataSourceEntry = (name: string, type: string, data: SchemaSnapshot): DataSource => {
@@ -1047,8 +1128,7 @@ export default function App() {
                   pipeline={pipeline}
                   onRunPipeline={runAiPipeline}
                   onLoadSample={loadSampleData}
-                  onGenerateReport={generateAndDownload}
-                  onPublishReport={publishReport}
+                  onGenerateReport={generateReport}
                 />
               }
             />
@@ -1153,6 +1233,32 @@ export default function App() {
               element={<Schedule templates={templates} onRequestNotifications={requestNotifications} />}
             />
             <Route
+              path="/reports"
+              element={
+                <Reports
+                  templates={templates}
+                  reports={reports}
+                  onGenerateReport={generateReport}
+                  onPublishReport={publishReport}
+                />
+              }
+            />
+            <Route
+              path="/data-products"
+              element={
+                <DataProducts
+                  templates={templates}
+                  templateCoverage={templateCoverage}
+                  activeTemplateId={activeTemplateId}
+                  onSelectTemplate={setActiveTemplateId}
+                  onDownloadSnapshot={downloadSnapshot}
+                  onDownloadTemplates={downloadTemplates}
+                  onDownloadMappings={downloadMappings}
+                  onDownloadJoinPlan={downloadJoinPlan}
+                />
+              }
+            />
+            <Route
               path="/analytics"
               element={
                 <Analytics
@@ -1161,12 +1267,6 @@ export default function App() {
                   snapshot={snapshot}
                   totalMapped={totalMapped}
                   templateCoverage={templateCoverage}
-                  activeTemplateId={activeTemplateId}
-                  onSelectTemplate={setActiveTemplateId}
-                  onDownloadSnapshot={downloadSnapshot}
-                  onDownloadTemplates={downloadTemplates}
-                  onDownloadMappings={downloadMappings}
-                  onDownloadJoinPlan={downloadJoinPlan}
                   aiArtifacts={aiArtifacts}
                 />
               }

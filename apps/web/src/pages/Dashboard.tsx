@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Database, Share2, Clock, CheckCircle2, AlertTriangle, Download, Globe } from 'lucide-react';
+import { Database, Share2, Clock, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as ReTooltip, ResponsiveContainer } from 'recharts';
 import { DataSource, ReportEntry, Template } from '../types';
 
@@ -65,7 +65,7 @@ const Dashboard: React.FC<{
   onRunPipeline: (prompt: string) => void;
   onLoadSample: () => void;
   onGenerateReport: (templateId: string) => void;
-  onPublishReport: (reportId: string) => void;
+  onPublishReport?: (reportId: string) => void;
 }> = ({
   templates,
   dataSources,
@@ -75,8 +75,7 @@ const Dashboard: React.FC<{
   pipeline,
   onRunPipeline,
   onLoadSample,
-  onGenerateReport,
-  onPublishReport
+  onGenerateReport
 }) => {
   const navigate = useNavigate();
   const [pipelinePrompt, setPipelinePrompt] = React.useState(pipeline.prompt);
@@ -339,7 +338,7 @@ const Dashboard: React.FC<{
                         onClick={() => onGenerateReport(item.template.id)}
                         className="flex-1 py-1.5 px-3 bg-indigo-600 text-white rounded text-xs font-medium hover:bg-indigo-700"
                       >
-                        Generate & Download
+                        Generate Report
                       </button>
                     ) : (
                       <button
@@ -363,73 +362,17 @@ const Dashboard: React.FC<{
         </div>
       </div>
 
-      <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden mb-8">
-        <div className="p-6 border-b border-slate-100">
-          <h3 className="font-bold text-slate-900">Report History</h3>
-          <p className="text-sm text-slate-500">Generated outputs and distribution status.</p>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-8">
+        <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+          <h3 className="font-semibold text-slate-900 mb-2">Report Studio</h3>
+          <p className="text-sm text-slate-500 mb-4">Generate stakeholder-ready reports with narrative, KPIs, and evidence.</p>
+          <Link className="text-indigo-600 font-medium" to="/reports">Open Report Studio →</Link>
         </div>
-        {reports.length === 0 ? (
-          <div className="p-10 text-center text-slate-400">No reports generated yet.</div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
-              <thead className="bg-slate-50 text-slate-500 font-medium">
-                <tr>
-                  <th className="px-6 py-4">Template</th>
-                  <th className="px-6 py-4">Generated</th>
-                  <th className="px-6 py-4">Status</th>
-                  <th className="px-6 py-4 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {reports.map(report => (
-                  <tr key={report.id} className="hover:bg-slate-50">
-                    <td className="px-6 py-4">
-                      <div className="font-medium text-slate-900">{report.templateName}</div>
-                      <div className="text-xs text-slate-400">{report.stakeholder}</div>
-                    </td>
-                    <td className="px-6 py-4 text-slate-600">{report.dateGenerated}</td>
-                    <td className="px-6 py-4">
-                      <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${report.status === 'Published'
-                        ? 'bg-emerald-100 text-emerald-700 border border-emerald-200'
-                        : 'bg-slate-100 text-slate-600 border border-slate-200'
-                        }`}>
-                        {report.status}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-right">
-                      <div className="flex flex-col items-end gap-2">
-                        {report.status !== 'Published' ? (
-                          <button
-                            onClick={() => onPublishReport(report.id)}
-                            className="px-3 py-1.5 bg-white border border-slate-300 text-slate-600 hover:text-slate-900 hover:border-slate-400 rounded text-xs font-medium"
-                          >
-                            Publish API
-                          </button>
-                        ) : (
-                          <button
-                            onClick={() => navigator.clipboard.writeText(apiUrlForTemplate(report.templateId))}
-                            className="px-3 py-1.5 bg-emerald-50 border border-emerald-200 text-emerald-700 hover:bg-emerald-100 rounded text-xs font-medium flex items-center gap-1"
-                          >
-                            <Globe size={12} /> Copy API URL
-                          </button>
-                        )}
-                        <button
-                          onClick={() => {
-                            window.location.href = `/api/output?format=xlsx&templateId=${encodeURIComponent(report.templateId)}`;
-                          }}
-                          className="px-3 py-1.5 bg-indigo-50 border border-indigo-200 text-indigo-700 hover:bg-indigo-100 rounded text-xs font-medium flex items-center gap-1"
-                        >
-                          <Download size={12} /> Download Excel
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+        <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+          <h3 className="font-semibold text-slate-900 mb-2">Data Products</h3>
+          <p className="text-sm text-slate-500 mb-4">Download clean datasets or share them via API endpoints.</p>
+          <Link className="text-indigo-600 font-medium" to="/data-products">Open Data Products →</Link>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
