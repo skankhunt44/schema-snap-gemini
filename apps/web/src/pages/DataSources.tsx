@@ -17,7 +17,7 @@ type Props = {
   snapshot: SchemaSnapshot | null;
   loading: boolean;
   error: string | null;
-  onCsvIngest: (name: string, files: File[]) => Promise<boolean> | boolean;
+  onCsvIngest: (name: string, files: File[], autoFix?: boolean) => Promise<boolean> | boolean;
   onDDLIngest: (name: string, ddl: string, dialect: string) => Promise<boolean> | boolean;
   onDbIngest: (name: string, dbType: string, connectionString: string) => Promise<boolean> | boolean;
   onSQLiteIngest: (name: string, file: File) => Promise<boolean> | boolean;
@@ -43,6 +43,7 @@ const DataSources: React.FC<Props> = ({
   const [dbType, setDbType] = useState('postgres');
   const [connectionString, setConnectionString] = useState('');
   const [files, setFiles] = useState<File[]>([]);
+  const [autoFix, setAutoFix] = useState(true);
   const [sqliteFile, setSqliteFile] = useState<File | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [dragActive, setDragActive] = useState(false);
@@ -57,6 +58,7 @@ const DataSources: React.FC<Props> = ({
     setDbType('postgres');
     setConnectionString('');
     setFiles([]);
+    setAutoFix(true);
     setSqliteFile(null);
   };
 
@@ -68,7 +70,7 @@ const DataSources: React.FC<Props> = ({
   const handleCsvSubmit = async () => {
     if (!files.length) return;
     const sourceName = name || files[0].name.replace(/\.(csv|xlsx|xls)$/i, '');
-    const ok = await onCsvIngest(sourceName, files);
+    const ok = await onCsvIngest(sourceName, files, autoFix);
     if (ok) handleClose();
   };
 
@@ -353,12 +355,23 @@ const DataSources: React.FC<Props> = ({
                       className="mt-3 block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"
                     />
                   </div>
+                  <div className="mt-3 flex items-center gap-2 text-sm text-slate-600">
+                    <input
+                      id="auto-fix-toggle"
+                      type="checkbox"
+                      checked={autoFix}
+                      onChange={(e) => setAutoFix(e.target.checked)}
+                    />
+                    <label htmlFor="auto-fix-toggle">
+                      Auto-fix data quality issues before ingesting (fill missing values, dedupe IDs)
+                    </label>
+                  </div>
                   <button
                     onClick={handleCsvSubmit}
                     disabled={!files.length || loading}
                     className="mt-3 w-full bg-indigo-600 text-white rounded-lg py-2 hover:bg-indigo-700 disabled:opacity-50"
                   >
-                    {loading ? 'Analyzing…' : 'Connect Files'}
+                    {loading ? 'Analyzing…' : autoFix ? 'Auto-Fix & Re-Upload' : 'Connect Files'}
                   </button>
                 </div>
               )}

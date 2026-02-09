@@ -4,10 +4,11 @@ type SourceField = { id: string; name: string; description?: string; dataType?: 
 
 type TemplateField = { id: string; name: string; description?: string };
 
-export const ingestCsv = async (files: File[]): Promise<SchemaSnapshot> => {
+export const ingestCsv = async (files: File[], options?: { autoFix?: boolean }): Promise<SchemaSnapshot> => {
   const form = new FormData();
   files.forEach(f => form.append('files', f));
-  const res = await fetch('/api/ingest/csv', { method: 'POST', body: form });
+  const query = options?.autoFix ? '?autoFix=true' : '';
+  const res = await fetch(`/api/ingest/csv${query}`, { method: 'POST', body: form });
   if (!res.ok) throw new Error(await res.text());
   return res.json();
 };

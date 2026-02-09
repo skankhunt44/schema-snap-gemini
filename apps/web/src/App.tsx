@@ -529,7 +529,7 @@ export default function App() {
                   snapshot={snapshot}
                   loading={loading}
                   error={error}
-                  onCsvIngest={(name, files) => handleIngest('CSV', name, () => ingestCsv(files))}
+                  onCsvIngest={(name, files, autoFix) => handleIngest('CSV', name, () => ingestCsv(files, { autoFix }))}
                   onDDLIngest={(name, ddl, dialect) => handleIngest('DDL', name, () => ingestDDL(ddl, dialect))}
                   onDbIngest={(name, dbType, connectionString) => handleIngest(dbType, name, () => ingestDB(dbType, connectionString))}
                   onSQLiteIngest={(name, file) => handleIngest('SQLite', name, () => ingestSQLite(file))}

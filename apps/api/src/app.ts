@@ -2,7 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import multer from 'multer';
 
-import { ingestCsvBuffer } from './ingest/csv';
+import { ingestCsvBuffer, ingestCsvBufferAutoFix } from './ingest/csv';
 import { ingestDDL } from './ingest/ddl';
 import { ingestMySQL, ingestPostgres, ingestSQLite } from './ingest/db';
 import { inferRelationships } from './infer';
@@ -45,11 +45,14 @@ export const createApp = () => {
       const files = req.files as Express.Multer.File[];
       if (!files?.length) return res.status(400).json({ error: 'No CSV files uploaded.' });
 
-      const tables: TableSchema[] = files.map(file => ingestCsvBuffer(file.buffer, file.originalname));
+      const autoFix = String(req.query.autoFix || '').toLowerCase() === 'true';
+      const tables: TableSchema[] = files.map(file =>
+        autoFix ? ingestCsvBufferAutoFix(file.buffer, file.originalname) : ingestCsvBuffer(file.buffer, file.originalname)
+      );
       const relationships = await inferRelationships(tables, process.env.GEMINI_API_KEY);
 
       const snapshot: SchemaSnapshot = { tables, relationships };
-      res.json(snapshot);
+      res.json({ ...snapshot, autoFixApplied: autoFix });
     } catch (err: any) {
       res.status(500).json({ error: err.message || 'CSV ingest failed' });
     }

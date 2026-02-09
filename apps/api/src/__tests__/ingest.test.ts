@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import * as XLSX from 'xlsx';
-import { ingestCsvBuffer } from '../ingest/csv';
+import { ingestCsvBuffer, ingestCsvBufferAutoFix } from '../ingest/csv';
 import { ingestDDL } from '../ingest/ddl';
 
 const makeWorkbookBuffer = () => {
@@ -32,6 +32,14 @@ describe('ingestCsvBuffer', () => {
     expect(table.rowCount).toBe(2);
     expect(table.source).toBe('excel');
     expect(table.columns.map(c => c.name)).toEqual(['id', 'name']);
+  });
+
+  it('auto-fixes missing values and duplicate ids', () => {
+    const csv = 'id,amount\n1,10\n1,\n2,20\n3,';
+    const table = ingestCsvBufferAutoFix(Buffer.from(csv), 'payments.csv');
+    expect(table.rowCount).toBe(3);
+    const amount = table.columns.find(c => c.name === 'amount');
+    expect(amount?.nullRatio).toBe(0);
   });
 });
 
