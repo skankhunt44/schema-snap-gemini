@@ -69,6 +69,49 @@ export default function App() {
     return 1 - dist / maxLen;
   };
 
+  const detectOperationFromField = (field: TemplateField) => {
+    const text = `${field.name} ${field.description || ''}`.toLowerCase();
+    if (/(count|number of|# of|qty|quantity)/.test(text)) return 'COUNT';
+    if (/(average|avg|mean)/.test(text)) return 'AVERAGE';
+    if (/(total|sum|amount|budget|revenue)/.test(text)) return 'SUM';
+    if (/(last|latest|most recent|recent)/.test(text)) return 'LAST';
+    if (/(first|earliest)/.test(text)) return 'FIRST';
+    return null;
+  };
+
+  const scoreSourceField = (field: TemplateField, source: SourceField, operation: string) => {
+    let score = nameSimilarity(field.name, source.column) * 0.7 + nameSimilarity(field.name, source.table) * 0.3;
+    const col = source.column.toLowerCase();
+    if (operation === 'COUNT' || operation === 'COUNT_DISTINCT') {
+      if (col.includes('id')) score += 0.15;
+    }
+    if (operation === 'SUM' || operation === 'AVERAGE') {
+      if (col.includes('amount') || col.includes('total') || col.includes('value')) score += 0.2;
+    }
+    if (operation === 'LAST' || operation === 'FIRST') {
+      if (col.includes('date') || col.includes('time')) score += 0.2;
+    }
+    return score;
+  };
+
+  const pickSourceFieldForOperation = (field: TemplateField, operation: string, sources: SourceField[]) => {
+    let candidates = sources;
+    if (operation === 'SUM' || operation === 'AVERAGE') {
+      candidates = sources.filter(s => s.dataType === 'number' || s.dataType === 'currency');
+    }
+    if (operation === 'LAST' || operation === 'FIRST') {
+      candidates = sources.filter(s => s.dataType === 'date');
+    }
+    if (!candidates.length) candidates = sources;
+
+    let best: { id: string; score: number } | null = null;
+    candidates.forEach(source => {
+      const score = scoreSourceField(field, source, operation);
+      if (!best || score > best.score) best = { id: source.id, score };
+    });
+    return best?.id || null;
+  };
+
   const mergeSnapshots = (current: SchemaSnapshot | null, incoming: SchemaSnapshot): SchemaSnapshot => {
     if (!current) return incoming;
 
@@ -379,16 +422,35 @@ export default function App() {
         };
       });
 
-      setAiSuggestionsByTemplate(prev => ({ ...prev, [activeTemplateId]: map }));
+      const enrichedMap: Record<string, { sourceId: string | null; confidence: number; rationale: string; operation?: string }> = {
+        ...map
+      };
+
+      templateFields.forEach(field => {
+        const detected = detectOperationFromField(field);
+        const current = enrichedMap[field.id];
+        if (detected && (!current?.operation || current.operation === 'DIRECT')) {
+          const sourceId = current?.sourceId || pickSourceFieldForOperation(field, detected, sources);
+          enrichedMap[field.id] = {
+            sourceId,
+            confidence: current?.confidence ?? 0,
+            rationale: current?.rationale || 'Heuristic aggregation match',
+            operation: detected
+          };
+        }
+      });
+
+      setAiSuggestionsByTemplate(prev => ({ ...prev, [activeTemplateId]: enrichedMap }));
       setAiSummaryByTemplate(prev => ({ ...prev, [activeTemplateId]: result.summary || '' }));
       setMappingByTemplate(prev => {
         const next: Record<string, MappingEntry> = {};
         templateFields.forEach(field => {
+          const entry = enrichedMap[field.id];
           next[field.id] = {
-            sourceFieldId: map[field.id]?.sourceId ?? null,
-            operation: map[field.id]?.operation ?? 'DIRECT',
-            confidence: map[field.id]?.confidence ?? 0,
-            rationale: map[field.id]?.rationale ?? ''
+            sourceFieldId: entry?.sourceId ?? null,
+            operation: entry?.operation ?? 'DIRECT',
+            confidence: entry?.confidence ?? 0,
+            rationale: entry?.rationale ?? ''
           };
         });
         return { ...prev, [activeTemplateId]: next };

@@ -49,7 +49,9 @@ ${JSON.stringify(templateFields.map(f => ({ id: f.id, name: f.name, desc: f.desc
 Return JSON with:
 - summary: short rationale about overall mapping quality
 - mappings: array of mappings. If no suitable match is found, set sourceFieldId to null.
-Provide a confidence score (0-1) and a short rationale.
+Provide a confidence score (0-1), a short rationale, and an operation.
+Operation must be one of: DIRECT, COUNT, COUNT_DISTINCT, SUM, AVERAGE, FIRST, LAST.
+If a field implies aggregation (e.g., count/total/average/last), set the appropriate operation and still choose the sourceFieldId for the column to aggregate.
 `;
 
   const ai = new GoogleGenAI({ apiKey });
@@ -73,7 +75,7 @@ Provide a confidence score (0-1) and a short rationale.
                 rationale: { type: Type.STRING },
                 operation: { type: Type.STRING, nullable: true }
               },
-              required: ['templateFieldId', 'confidence', 'rationale']
+              required: ['templateFieldId', 'confidence', 'rationale', 'operation']
             }
           }
         },
