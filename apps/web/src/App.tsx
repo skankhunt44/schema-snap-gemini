@@ -1,7 +1,7 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { ingestCsv, ingestDDL, ingestDB, ingestSQLite, getState, loadSampleSnapshot, saveState, suggestMappings, explainSchema, generateTemplate, suggestFixes } from './lib/api';
-import { DataSource, MappingEntry, Relationship, ReportEntry, SchemaSnapshot, Template, TemplateField, SourceField, TableSchema } from './types';
+import { DataSource, GeminiArtifacts, MappingEntry, Relationship, ReportEntry, SchemaSnapshot, Template, TemplateField, SourceField, TableSchema } from './types';
 import Sidebar from './components/Sidebar';
 import Dashboard from './pages/Dashboard';
 import DataSources from './pages/DataSources';
@@ -43,6 +43,7 @@ export default function App() {
   const [activeTemplateId, setActiveTemplateId] = React.useState<string | null>(null);
   const [mappingByTemplate, setMappingByTemplate] = React.useState<Record<string, Record<string, MappingEntry>>>({});
   const [reports, setReports] = React.useState<ReportEntry[]>([]);
+  const [aiArtifacts, setAiArtifacts] = React.useState<GeminiArtifacts>({});
   const [pipeline, setPipeline] = React.useState<PipelineState>({
     status: 'idle',
     error: null,
@@ -643,7 +644,14 @@ export default function App() {
         templates: nextTemplates,
         activeTemplateId: newTemplate.id,
         mappingByTemplate: nextMappingByTemplate,
-        reports
+        reports,
+        aiArtifacts: {
+          schemaSummary: schemaResult.summary,
+          joinPaths: schemaResult.joinPaths,
+          mappingSummary: mappingResult.summary,
+          fixSummary,
+          fixSuggestions
+        }
       });
 
       let outputPreview: { columns: string[]; rows: Record<string, unknown>[] } | undefined;
@@ -658,6 +666,16 @@ export default function App() {
           };
         }
       }
+
+      const artifacts: GeminiArtifacts = {
+        schemaSummary: schemaResult.summary,
+        joinPaths: schemaResult.joinPaths,
+        mappingSummary: mappingResult.summary,
+        fixSummary,
+        fixSuggestions
+      };
+
+      setAiArtifacts(artifacts);
 
       setPipeline(prev => ({
         ...prev,
@@ -919,12 +937,13 @@ export default function App() {
         templates,
         activeTemplateId,
         mappingByTemplate,
-        reports
+        reports,
+        aiArtifacts
       }).catch(() => undefined);
     }, 500);
 
     return () => clearTimeout(timer);
-  }, [hydrated, snapshot, dataSources, templates, activeTemplateId, mappingByTemplate, reports]);
+  }, [hydrated, snapshot, dataSources, templates, activeTemplateId, mappingByTemplate, reports, aiArtifacts]);
 
   React.useEffect(() => {
     if (!('Notification' in window)) return;
@@ -983,6 +1002,7 @@ export default function App() {
           setTemplates(state.templates || []);
           setActiveTemplateId(state.activeTemplateId || null);
           setReports(state.reports || []);
+          setAiArtifacts(state.aiArtifacts || {});
           const normalized: Record<string, Record<string, MappingEntry>> = {};
           Object.entries(state.mappingByTemplate || {}).forEach(([tplId, mapping]) => {
             const record: Record<string, MappingEntry> = {};
@@ -1147,6 +1167,7 @@ export default function App() {
                   onDownloadTemplates={downloadTemplates}
                   onDownloadMappings={downloadMappings}
                   onDownloadJoinPlan={downloadJoinPlan}
+                  aiArtifacts={aiArtifacts}
                 />
               }
             />

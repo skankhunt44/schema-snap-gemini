@@ -1,6 +1,6 @@
 import React from 'react';
 import { BarChart3, Database, FileText, Share2 } from 'lucide-react';
-import { DataSource, SchemaSnapshot, Template } from '../types';
+import { DataSource, GeminiArtifacts, SchemaSnapshot, Template } from '../types';
 
 type TemplateCoverage = {
   id: string;
@@ -41,6 +41,7 @@ type Props = {
   onDownloadTemplates: () => void;
   onDownloadMappings: () => void;
   onDownloadJoinPlan: () => void;
+  aiArtifacts: GeminiArtifacts;
 };
 
 const Analytics: React.FC<Props> = ({
@@ -54,7 +55,8 @@ const Analytics: React.FC<Props> = ({
   onDownloadSnapshot,
   onDownloadTemplates,
   onDownloadMappings,
-  onDownloadJoinPlan
+  onDownloadJoinPlan,
+  aiArtifacts
 }) => {
   const totalFields = templates.reduce((acc, t) => acc + t.fields.length, 0);
   const relationships = snapshot?.relationships.length ?? 0;
@@ -191,6 +193,54 @@ const Analytics: React.FC<Props> = ({
               </>
             )}
           </div>
+        </div>
+      </div>
+
+      <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden mb-6">
+        <div className="p-6 border-b border-slate-100">
+          <h3 className="font-bold text-slate-900">Gemini Artifacts</h3>
+          <p className="text-sm text-slate-500">Saved outputs from the AI pipeline.</p>
+        </div>
+        <div className="p-6 space-y-4">
+          {!aiArtifacts || (!aiArtifacts.schemaSummary && !aiArtifacts.fixSummary && !aiArtifacts.mappingSummary) ? (
+            <div className="text-sm text-slate-400">Run the AI pipeline to save artifacts here.</div>
+          ) : (
+            <>
+              {aiArtifacts.schemaSummary && (
+                <div className="bg-slate-50 border border-slate-200 rounded-lg p-3">
+                  <div className="text-xs uppercase tracking-wide text-slate-400 mb-1">Schema Summary</div>
+                  <p className="text-sm text-slate-700">{aiArtifacts.schemaSummary}</p>
+                </div>
+              )}
+              {aiArtifacts.joinPaths && aiArtifacts.joinPaths.length > 0 && (
+                <div className="bg-slate-50 border border-slate-200 rounded-lg p-3">
+                  <div className="text-xs uppercase tracking-wide text-slate-400 mb-2">Join Paths</div>
+                  <ul className="text-xs text-slate-600 space-y-1">
+                    {aiArtifacts.joinPaths.map((path, idx) => (
+                      <li key={idx}><span className="font-semibold">{path.title}:</span> {path.path.join(' → ')}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {aiArtifacts.mappingSummary && (
+                <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-3">
+                  <div className="text-xs uppercase tracking-wide text-indigo-500 mb-1">Mapping Summary</div>
+                  <p className="text-sm text-indigo-700">{aiArtifacts.mappingSummary}</p>
+                </div>
+              )}
+              {aiArtifacts.fixSummary && (
+                <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3">
+                  <div className="text-xs uppercase tracking-wide text-emerald-500 mb-1">Fix Suggestions</div>
+                  <p className="text-sm text-emerald-700 mb-2">{aiArtifacts.fixSummary}</p>
+                  <ul className="text-xs text-emerald-700 space-y-1">
+                    {(aiArtifacts.fixSuggestions || []).slice(0, 3).map((item, idx) => (
+                      <li key={idx}><span className="font-semibold">{item.issue}</span> → {item.fix}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </>
+          )}
         </div>
       </div>
 

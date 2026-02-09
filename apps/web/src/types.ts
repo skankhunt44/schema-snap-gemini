@@ -92,6 +92,14 @@ export type DataSource = {
   fields?: SourceField[];
 };
 
+export type GeminiArtifacts = {
+  schemaSummary?: string;
+  joinPaths?: Array<{ title: string; path: string[]; rationale: string }>;
+  fixSummary?: string;
+  fixSuggestions?: Array<{ issue: string; fix: string; rationale?: string }>;
+  mappingSummary?: string;
+};
+
 export type PersistedState = {
   snapshot: SchemaSnapshot | null;
   dataSources: DataSource[];
@@ -99,4 +107,5 @@ export type PersistedState = {
   activeTemplateId: string | null;
   mappingByTemplate: Record<string, Record<string, MappingEntry>>;
   reports: ReportEntry[];
+  aiArtifacts?: GeminiArtifacts;
 };
