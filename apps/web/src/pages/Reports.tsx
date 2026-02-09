@@ -15,6 +15,7 @@ type Props = {
 const Reports: React.FC<Props> = ({ templates, reports, onGenerateReport, onPublishReport }) => {
   const [selectedTemplateId, setSelectedTemplateId] = React.useState<string>(templates[0]?.id || '');
   const [activeReportId, setActiveReportId] = React.useState<string>(reports[0]?.id || '');
+  const [generating, setGenerating] = React.useState(false);
   const activeReport = reports.find(report => report.id === activeReportId) || reports[0] || null;
 
   React.useEffect(() => {
@@ -93,11 +94,22 @@ const Reports: React.FC<Props> = ({ templates, reports, onGenerateReport, onPubl
               ))}
             </select>
             <button
-              onClick={() => selectedTemplateId && onGenerateReport(selectedTemplateId)}
-              disabled={!selectedTemplateId}
-              className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50"
+              onClick={async () => {
+                if (!selectedTemplateId) return;
+                setGenerating(true);
+                try {
+                  await onGenerateReport(selectedTemplateId);
+                } finally {
+                  setGenerating(false);
+                }
+              }}
+              disabled={!selectedTemplateId || generating}
+              className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 flex items-center gap-2"
             >
-              Generate Report
+              {generating && (
+                <span className="h-4 w-4 border-2 border-white/60 border-t-white rounded-full animate-spin" />
+              )}
+              {generating ? 'Generating…' : 'Generate Report'}
             </button>
           </div>
         </div>
