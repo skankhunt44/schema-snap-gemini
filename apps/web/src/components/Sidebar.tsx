@@ -41,8 +41,12 @@ const Sidebar: React.FC = () => {
         `}
       >
         <div className="p-6 flex items-center gap-3 text-white">
-          <div className="p-2 bg-indigo-600 rounded-xl">
-            <span className="text-lg font-bold">S</span>
+          <div className="p-2 bg-white rounded-xl">
+            <img
+              src="/schemasnap_unique_logo.png"
+              alt="SchemaSnap"
+              className="w-8 h-8 object-contain"
+            />
           </div>
           <span className="text-xl font-bold tracking-tight">SchemaSnap</span>
         </div>
