@@ -109,53 +109,7 @@ const DataSources: React.FC<Props> = ({
     </button>
   );
 
-  const downloadTextFile = (filename: string, content: string) => {
-    const blob = new Blob([content], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = filename;
-    link.click();
-    URL.revokeObjectURL(url);
-  };
-
   const isIdColumn = (name: string) => /(^id$|_id$|id$)/i.test(name);
-
-  const buildFixScript = (table: TableSchema) => {
-    const missingColumns = table.columns.filter(c => (c.nullRatio ?? 0) >= 0.05);
-    const idColumns = table.columns.filter(c => isIdColumn(c.name));
-
-    const lines: string[] = [
-      'import pandas as pd',
-      '',
-      `df = pd.read_csv("${table.name}.csv")`,
-      ''
-    ];
-
-    missingColumns.forEach(col => {
-      const name = col.name;
-      const dataType = col.dataType;
-      if (dataType === 'number' || dataType === 'currency') {
-        lines.push(`df["${name}"] = pd.to_numeric(df["${name}"], errors="coerce")`);
-        lines.push(`df["${name}"] = df["${name}"].fillna(df["${name}"].median())`);
-      } else if (dataType === 'date') {
-        lines.push(`df["${name}"] = pd.to_datetime(df["${name}"], errors="coerce")`);
-        lines.push(`df["${name}"] = df["${name}"].fillna(df["${name}"].mode().iloc[0])`);
-      } else {
-        lines.push(`df["${name}"] = df["${name}"].fillna(df["${name}"].mode().iloc[0])`);
-      }
-      lines.push('');
-    });
-
-    if (idColumns.length) {
-      const idList = idColumns.map(c => `"${c.name}"`).join(', ');
-      lines.push(`df = df.drop_duplicates(subset=[${idList}])`);
-      lines.push('');
-    }
-
-    lines.push(`df.to_csv("${table.name}.cleaned.csv", index=False)`);
-    return lines.join('\n');
-  };
 
   const qualityTables = (snapshot?.tables || []).map(table => {
     const missingColumns = table.columns.filter(c => (c.nullRatio ?? 0) >= 0.05);
@@ -257,6 +211,7 @@ const DataSources: React.FC<Props> = ({
           <h2 className="text-lg font-semibold text-slate-900">Data Quality</h2>
           <p className="text-sm text-slate-500">
             Based on profile stats from the uploaded data sample (missing values, uniqueness, etc.).
+            Auto-fix runs during upload when enabled.
           </p>
         </div>
 
@@ -277,12 +232,9 @@ const DataSources: React.FC<Props> = ({
                     <h3 className="font-semibold text-slate-900">{table.name}</h3>
                     <p className="text-xs text-slate-500">{table.columns.length} columns • {table.rowCount ?? '—'} rows sampled</p>
                   </div>
-                  <button
-                    onClick={() => downloadTextFile(`${table.name}-cleaning.py`, buildFixScript(table))}
-                    className="px-3 py-2 text-xs bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
-                  >
-                    Download Fix Script
-                  </button>
+                  <div className="text-xs text-slate-400">
+                    Auto-fix on upload will resolve these issues.
+                  </div>
                 </div>
 
                 {missingColumns.length > 0 && (
