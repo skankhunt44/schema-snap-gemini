@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { FileText, Plus, Edit, Trash2, UploadCloud, Wand2 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { FileText, Plus, Edit, Trash2, UploadCloud, Wand2, X } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { Template, TemplateField } from '../types';
 import ConfirmDialog from '../components/ConfirmDialog';
@@ -33,6 +34,7 @@ const Templates: React.FC<Props> = ({
   onExportMappings,
   mappedCountForTemplate
 }) => {
+  const navigate = useNavigate();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [name, setName] = useState('');
@@ -220,9 +222,12 @@ const Templates: React.FC<Props> = ({
                 </div>
                 <div className="flex gap-2">
                   <button
-                    onClick={() => onSelectTemplate(template.id)}
+                    onClick={() => {
+                      onSelectTemplate(template.id);
+                      navigate('/map');
+                    }}
                     className="text-indigo-600 hover:text-indigo-700"
-                    title="Set active"
+                    title="Open Smart Mapper"
                   >
                     <Wand2 size={16} />
                   </button>
@@ -244,14 +249,34 @@ const Templates: React.FC<Props> = ({
       </div>
 
       {isModalOpen && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl overflow-hidden">
-            <div className="p-6 border-b border-slate-100">
-              <h3 className="text-lg font-bold text-slate-900">{editingId ? 'Edit Template' : 'New Template'}</h3>
-              <p className="text-sm text-slate-500">Define the stakeholder fields you need to report.</p>
+        <div
+          className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm overflow-y-auto"
+          onClick={() => {
+            setIsModalOpen(false);
+            resetForm();
+          }}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-hidden flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="p-6 border-b border-slate-100 flex items-start justify-between gap-4">
+              <div>
+                <h3 className="text-lg font-bold text-slate-900">{editingId ? 'Edit Template' : 'New Template'}</h3>
+                <p className="text-sm text-slate-500">Define the stakeholder fields you need to report.</p>
+              </div>
+              <button
+                onClick={() => {
+                  setIsModalOpen(false);
+                  resetForm();
+                }}
+                className="text-slate-400 hover:text-slate-600"
+              >
+                <X size={18} />
+              </button>
             </div>
 
-            <div className="p-6 space-y-4">
+            <div className="p-6 space-y-4 overflow-y-auto">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="text-xs uppercase tracking-wide text-slate-500">Template Name</label>
