@@ -982,7 +982,10 @@ export default function App() {
 
     const sumForWindow = (start: Date, end: Date) =>
       dated
-        .filter(entry => (entry.date as Date) >= start && (entry.date as Date) <= end)
+        .filter(entry => {
+          const entryDate = entry.date as Date;
+          return entryDate >= start && entryDate <= end;
+        })
         .reduce((acc, entry) => acc + entry.value, 0);
 
     const current = sumForWindow(currentStart, maxDate);
