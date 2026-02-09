@@ -26,6 +26,7 @@ export default function App() {
   const [aiError, setAiError] = React.useState<string | null>(null);
   const [selectedRel, setSelectedRel] = React.useState<Relationship | null>(null);
   const [aiSuggestionsByTemplate, setAiSuggestionsByTemplate] = React.useState<Record<string, Record<string, { sourceId: string | null; confidence: number; rationale: string }>>>({});
+  const [aiSummaryByTemplate, setAiSummaryByTemplate] = React.useState<Record<string, string>>({});
 
   const [hydrated, setHydrated] = React.useState(false);
 
@@ -379,6 +380,7 @@ export default function App() {
       });
 
       setAiSuggestionsByTemplate(prev => ({ ...prev, [activeTemplateId]: map }));
+      setAiSummaryByTemplate(prev => ({ ...prev, [activeTemplateId]: result.summary || '' }));
       setMappingByTemplate(prev => {
         const next: Record<string, MappingEntry> = {};
         templateFields.forEach(field => {
@@ -797,6 +799,7 @@ export default function App() {
                   suggestionMap={suggestionMap}
                   aiLoading={aiLoading}
                   aiError={aiError}
+                  aiSummary={activeTemplateId ? aiSummaryByTemplate[activeTemplateId] || null : null}
                   onMappingChange={(fieldId, sourceId) => {
                     if (!activeTemplateId) return;
                     setMappingByTemplate(prev => ({

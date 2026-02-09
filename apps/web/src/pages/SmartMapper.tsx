@@ -14,6 +14,7 @@ type Props = {
   suggestionMap: Record<string, { sourceId: string | null; confidence: number; rationale: string }>;
   aiLoading: boolean;
   aiError: string | null;
+  aiSummary: string | null;
   onMappingChange: (fieldId: string, sourceId: string | null) => void;
   onOperationChange: (fieldId: string, operation: string) => void;
   onApplySuggestions: (sources: SourceField[]) => void;
@@ -31,6 +32,7 @@ const SmartMapper: React.FC<Props> = ({
   suggestionMap,
   aiLoading,
   aiError,
+  aiSummary,
   onMappingChange,
   onOperationChange,
   onApplySuggestions
@@ -99,6 +101,12 @@ const SmartMapper: React.FC<Props> = ({
       {aiError && (
         <div className="bg-rose-50 border border-rose-200 text-rose-700 rounded-lg px-4 py-2 mb-4 text-sm">
           {aiError}
+        </div>
+      )}
+
+      {aiSummary && !aiLoading && (
+        <div className="bg-indigo-50 border border-indigo-200 text-indigo-700 rounded-lg px-4 py-2 mb-4 text-sm">
+          <span className="font-semibold">Gemini summary:</span> {aiSummary}
         </div>
       )}
 

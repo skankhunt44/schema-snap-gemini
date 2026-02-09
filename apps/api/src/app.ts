@@ -7,6 +7,7 @@ import { ingestDDL } from './ingest/ddl';
 import { ingestMySQL, ingestPostgres, ingestSQLite } from './ingest/db';
 import { inferRelationships } from './infer';
 import { suggestMappingsGemini } from './map/suggest';
+import { explainSchemaGemini, generateTemplateGemini, suggestFixesGemini } from './ai';
 import { loadSampleTables } from './samples';
 import { readState, writeState } from './store';
 import { buildCombinedOutput, buildCombinedWorkbook } from './output';
@@ -145,10 +146,58 @@ export const createApp = () => {
       const apiKey = process.env.GEMINI_API_KEY;
       if (!apiKey) return res.status(400).json({ error: 'GEMINI_API_KEY not configured on server' });
 
-      const mappings = await suggestMappingsGemini(sourceFields, templateFields, apiKey);
-      res.json({ mappings });
+      const result = await suggestMappingsGemini(sourceFields, templateFields, apiKey);
+      res.json(result);
     } catch (err: any) {
       res.status(500).json({ error: err.message || 'AI mapping failed' });
+    }
+  });
+
+  app.post('/api/ai/schema-explain', async (_req, res) => {
+    try {
+      const apiKey = process.env.GEMINI_API_KEY;
+      if (!apiKey) return res.status(400).json({ error: 'GEMINI_API_KEY not configured on server' });
+      const state = await readState();
+      if (!state?.snapshot) return res.status(400).json({ error: 'No saved snapshot available.' });
+
+      const result = await explainSchemaGemini(state.snapshot, apiKey);
+      res.json(result);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || 'Schema explain failed' });
+    }
+  });
+
+  app.post('/api/ai/template-generate', async (req, res) => {
+    try {
+      const apiKey = process.env.GEMINI_API_KEY;
+      if (!apiKey) return res.status(400).json({ error: 'GEMINI_API_KEY not configured on server' });
+      const state = await readState();
+      if (!state?.snapshot) return res.status(400).json({ error: 'No saved snapshot available.' });
+      const prompt = String(req.body?.prompt || 'Create a donor impact report template');
+
+      const result = await generateTemplateGemini(state.snapshot, prompt, apiKey);
+      if (!result) return res.status(500).json({ error: 'Template generation failed' });
+      res.json(result);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || 'Template generation failed' });
+    }
+  });
+
+  app.post('/api/ai/fix-suggestions', async (req, res) => {
+    try {
+      const apiKey = process.env.GEMINI_API_KEY;
+      if (!apiKey) return res.status(400).json({ error: 'GEMINI_API_KEY not configured on server' });
+      const tableName = String(req.body?.tableName || '');
+      if (!tableName) return res.status(400).json({ error: 'tableName is required' });
+      const state = await readState();
+      if (!state?.snapshot) return res.status(400).json({ error: 'No saved snapshot available.' });
+      const table = state.snapshot.tables.find((t: TableSchema) => t.name === tableName);
+      if (!table) return res.status(400).json({ error: 'Table not found in snapshot' });
+
+      const result = await suggestFixesGemini(table, apiKey);
+      res.json(result);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || 'Fix suggestions failed' });
     }
   });
 

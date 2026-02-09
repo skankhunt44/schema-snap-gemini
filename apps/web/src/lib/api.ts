@@ -53,7 +53,41 @@ export const suggestMappings = async (sourceFields: SourceField[], templateField
     throw new Error(text);
   }
 
-  return res.json() as Promise<{ mappings: Array<{ templateFieldId: string; sourceFieldId: string | null; confidence: number; rationale: string; operation?: string }> }>;
+  return res.json() as Promise<{
+    summary: string;
+    mappings: Array<{ templateFieldId: string; sourceFieldId: string | null; confidence: number; rationale: string; operation?: string }>;
+  }>;
+};
+
+export const explainSchema = async () => {
+  const res = await fetch('/api/ai/schema-explain', { method: 'POST' });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json() as Promise<{ summary: string; joinPaths: Array<{ title: string; path: string[]; rationale: string }> }>;
+};
+
+export const generateTemplate = async (prompt: string) => {
+  const res = await fetch('/api/ai/template-generate', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ prompt })
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json() as Promise<{
+    name: string;
+    stakeholder: string;
+    frequency: string;
+    fields: Array<{ name: string; description?: string; required?: boolean; validationRule?: string }>;
+  }>;
+};
+
+export const suggestFixes = async (tableName: string) => {
+  const res = await fetch('/api/ai/fix-suggestions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ tableName })
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json() as Promise<{ summary: string; suggestions: Array<{ issue: string; fix: string; rationale?: string }> }>;
 };
 
 export const loadSampleSnapshot = async (): Promise<SchemaSnapshot> => {

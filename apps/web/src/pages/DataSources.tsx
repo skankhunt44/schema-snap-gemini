@@ -11,6 +11,7 @@ import {
   X
 } from 'lucide-react';
 import { DataSource, SchemaSnapshot, TableSchema } from '../types';
+import { suggestFixes } from '../lib/api';
 import ConfirmDialog from '../components/ConfirmDialog';
 
 type Props = {
@@ -52,6 +53,11 @@ const DataSources: React.FC<Props> = ({
   const [dragActive, setDragActive] = useState(false);
   const [previewSourceId, setPreviewSourceId] = useState<string | null>(null);
   const [previewTable, setPreviewTable] = useState<string | null>(null);
+  const [fixLoading, setFixLoading] = useState<string | null>(null);
+  const [fixError, setFixError] = useState<string | null>(null);
+  const [fixSuggestions, setFixSuggestions] = useState<
+    Record<string, { summary: string; suggestions: Array<{ issue: string; fix: string; rationale?: string }> }>
+  >({});
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const sqliteInputRef = useRef<HTMLInputElement>(null);
@@ -98,6 +104,19 @@ const DataSources: React.FC<Props> = ({
     const sourceName = name || sqliteFile.name.replace(/\.(db|sqlite)$/i, '');
     const ok = await onSQLiteIngest(sourceName, sqliteFile);
     if (ok) handleClose();
+  };
+
+  const handleAiFixSuggestions = async (tableName: string) => {
+    setFixLoading(tableName);
+    setFixError(null);
+    try {
+      const result = await suggestFixes(tableName);
+      setFixSuggestions(prev => ({ ...prev, [tableName]: result }));
+    } catch (err: any) {
+      setFixError(err.message || 'Failed to fetch AI fixes');
+    } finally {
+      setFixLoading(null);
+    }
   };
 
   const tabButton = (tab: typeof activeTab, label: string) => (
@@ -267,6 +286,7 @@ const DataSources: React.FC<Props> = ({
             Based on profile stats from the uploaded data sample (missing values, uniqueness, etc.).
             Auto-fix runs during upload when enabled.
           </p>
+          {fixError && <p className="text-sm text-rose-500 mt-2">{fixError}</p>}
         </div>
 
         {!snapshot ? (
@@ -286,8 +306,15 @@ const DataSources: React.FC<Props> = ({
                     <h3 className="font-semibold text-slate-900">{table.name}</h3>
                     <p className="text-xs text-slate-500">{table.columns.length} columns • {table.rowCount ?? '—'} rows sampled</p>
                   </div>
-                  <div className="flex items-center gap-3">
+                  <div className="flex flex-wrap items-center gap-3">
                     <span className="text-xs text-slate-400">Fix uses sampled rows only.</span>
+                    <button
+                      onClick={() => handleAiFixSuggestions(table.name)}
+                      className="px-3 py-2 text-xs bg-slate-900 text-white rounded-lg hover:bg-slate-800 disabled:opacity-50"
+                      disabled={fixLoading === table.name}
+                    >
+                      {fixLoading === table.name ? 'Gemini…' : 'Ask Gemini'}
+                    </button>
                     <button
                       onClick={() => onApplyFix(table.name)}
                       className="px-3 py-2 text-xs bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50"
@@ -297,6 +324,21 @@ const DataSources: React.FC<Props> = ({
                     </button>
                   </div>
                 </div>
+
+                {fixSuggestions[table.name] && (
+                  <div className="mb-3 bg-indigo-50 border border-indigo-200 rounded-lg p-3">
+                    <div className="text-xs uppercase tracking-wide text-indigo-500 mb-1">Gemini Suggestions</div>
+                    <p className="text-sm text-indigo-700 mb-2">{fixSuggestions[table.name].summary}</p>
+                    <ul className="text-xs text-indigo-700 space-y-1">
+                      {fixSuggestions[table.name].suggestions.map((item, idx) => (
+                        <li key={idx}>
+                          <span className="font-semibold">{item.issue}</span> → {item.fix}
+                          {item.rationale ? ` (${item.rationale})` : ''}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
 
                 {missingColumns.length > 0 && (
                   <div className="mb-3">

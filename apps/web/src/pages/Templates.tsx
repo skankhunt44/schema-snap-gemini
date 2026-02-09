@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { FileText, Plus, Edit, Trash2, UploadCloud, Wand2, X } from 'lucide-react';
 import * as XLSX from 'xlsx';
+import { generateTemplate } from '../lib/api';
 import { Template, TemplateField } from '../types';
 import ConfirmDialog from '../components/ConfirmDialog';
 
@@ -45,6 +46,10 @@ const Templates: React.FC<Props> = ({
   const [fields, setFields] = useState<TemplateField[]>([emptyField()]);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [dragActive, setDragActive] = useState(false);
+  const [aiModalOpen, setAiModalOpen] = useState(false);
+  const [aiPrompt, setAiPrompt] = useState('Create a donor impact report template');
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -105,6 +110,40 @@ const Templates: React.FC<Props> = ({
 
   const addField = () => setFields(prev => [...prev, emptyField()]);
   const removeField = (idx: number) => setFields(prev => prev.filter((_, i) => i !== idx));
+
+  const handleGenerateTemplate = async () => {
+    setAiLoading(true);
+    setAiError(null);
+    try {
+      const result = await generateTemplate(aiPrompt);
+      const newTemplate: Template = {
+        id: `tpl_${Date.now()}`,
+        name: result.name || 'AI Template',
+        stakeholder: result.stakeholder || 'Stakeholders',
+        frequency: result.frequency || 'Monthly',
+        fields: (result.fields || []).map((field, idx) => ({
+          id: `tf_${Date.now()}_${idx}`,
+          name: field.name,
+          description: field.description || '',
+          required: field.required ?? true,
+          validationRule: field.validationRule || ''
+        }))
+      };
+
+      if (newTemplate.fields.length === 0) {
+        setAiError('Gemini returned no fields. Try a more specific prompt.');
+        return;
+      }
+
+      onCreateTemplate(newTemplate);
+      onSelectTemplate(newTemplate.id);
+      setAiModalOpen(false);
+    } catch (err: any) {
+      setAiError(err.message || 'Failed to generate template');
+    } finally {
+      setAiLoading(false);
+    }
+  };
 
   const updateField = (idx: number, key: keyof TemplateField, value: any) => {
     setFields(prev => prev.map((f, i) => (i === idx ? { ...f, [key]: value } : f)));
@@ -192,6 +231,12 @@ const Templates: React.FC<Props> = ({
             disabled={!activeTemplateId}
           >
             <UploadCloud size={18} /> Export Mapping JSON
+          </button>
+          <button
+            onClick={() => setAiModalOpen(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg shadow-sm hover:bg-emerald-700"
+          >
+            <Wand2 size={18} /> Generate with Gemini
           </button>
           <button
             onClick={openNew}
@@ -441,6 +486,55 @@ const Templates: React.FC<Props> = ({
                 className="px-4 py-2 bg-indigo-600 text-white rounded-lg font-medium text-sm"
               >
                 Save Template
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {aiModalOpen && (
+        <div
+          className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm"
+          onClick={() => setAiModalOpen(false)}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-2xl w-full max-w-xl overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="p-6 border-b border-slate-100 flex items-start justify-between">
+              <div>
+                <h3 className="text-lg font-bold text-slate-900">Generate Template with Gemini</h3>
+                <p className="text-sm text-slate-500">Describe the report you want.</p>
+              </div>
+              <button
+                onClick={() => setAiModalOpen(false)}
+                className="text-slate-400 hover:text-slate-600"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <div className="p-6 space-y-3">
+              <textarea
+                className="w-full border border-slate-200 rounded-lg px-3 py-2 min-h-[120px]"
+                value={aiPrompt}
+                onChange={(e) => setAiPrompt(e.target.value)}
+                placeholder="e.g., Create a donor impact report for board members with totals, averages, and recent activity"
+              />
+              {aiError && <p className="text-sm text-rose-500">{aiError}</p>}
+            </div>
+            <div className="bg-slate-50 p-4 flex justify-end gap-3 border-t border-slate-100">
+              <button
+                onClick={() => setAiModalOpen(false)}
+                className="px-4 py-2 bg-white border border-slate-300 text-slate-700 rounded-lg font-medium text-sm"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleGenerateTemplate}
+                className="px-4 py-2 bg-emerald-600 text-white rounded-lg font-medium text-sm disabled:opacity-50"
+                disabled={aiLoading}
+              >
+                {aiLoading ? 'Generating…' : 'Generate Template'}
               </button>
             </div>
           </div>
