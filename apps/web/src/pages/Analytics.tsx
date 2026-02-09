@@ -2,6 +2,14 @@ import React from 'react';
 import { BarChart3, Database, FileText, Share2 } from 'lucide-react';
 import { DataSource, SchemaSnapshot, Template } from '../types';
 
+type TemplateCoverage = {
+  id: string;
+  name: string;
+  mapped: number;
+  total: number;
+  percent: number;
+};
+
 const StatCard: React.FC<{ title: string; value: string | number; sub: string; icon: React.ReactNode; color: string }> = ({
   title,
   value,
@@ -26,10 +34,16 @@ type Props = {
   templates: Template[];
   snapshot: SchemaSnapshot | null;
   totalMapped: number;
+  templateCoverage: TemplateCoverage[];
+  activeTemplateId: string | null;
+  onSelectTemplate: (id: string | null) => void;
   onDownloadSnapshot: () => void;
   onDownloadTemplates: () => void;
   onDownloadMappings: () => void;
   onDownloadJoinPlan: () => void;
+  onDownloadTemplateMappingJson: (templateId: string) => void;
+  onDownloadTemplateMappingCsv: (templateId: string) => void;
+  onDownloadTemplateDefinitionCsv: (templateId: string) => void;
 };
 
 const Analytics: React.FC<Props> = ({
@@ -37,13 +51,22 @@ const Analytics: React.FC<Props> = ({
   templates,
   snapshot,
   totalMapped,
+  templateCoverage,
+  activeTemplateId,
+  onSelectTemplate,
   onDownloadSnapshot,
   onDownloadTemplates,
   onDownloadMappings,
-  onDownloadJoinPlan
+  onDownloadJoinPlan,
+  onDownloadTemplateMappingJson,
+  onDownloadTemplateMappingCsv,
+  onDownloadTemplateDefinitionCsv
 }) => {
   const totalFields = templates.reduce((acc, t) => acc + t.fields.length, 0);
   const relationships = snapshot?.relationships.length ?? 0;
+
+  const selectedTemplateId = activeTemplateId || templateCoverage[0]?.id || null;
+  const selectedTemplate = templates.find(t => t.id === selectedTemplateId) || null;
 
   return (
     <div className="p-6">
@@ -81,6 +104,86 @@ const Analytics: React.FC<Props> = ({
           icon={<BarChart3 className="text-violet-600" />}
           color="bg-violet-600"
         />
+      </div>
+
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 mb-6">
+        <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+          <div className="p-6 border-b border-slate-100">
+            <h3 className="font-bold text-slate-900">Template Coverage</h3>
+            <p className="text-sm text-slate-500">Mapped fields per template.</p>
+          </div>
+          <div className="p-6 space-y-4">
+            {templateCoverage.length === 0 ? (
+              <div className="text-sm text-slate-400">No templates yet.</div>
+            ) : (
+              templateCoverage.map(item => (
+                <div key={item.id} className="space-y-2">
+                  <div className="flex justify-between text-sm text-slate-600">
+                    <span className="font-medium text-slate-900">{item.name}</span>
+                    <span>{item.mapped}/{item.total} mapped • {item.percent}%</span>
+                  </div>
+                  <div className="h-2 rounded-full bg-slate-100">
+                    <div
+                      className="h-2 rounded-full bg-indigo-600"
+                      style={{ width: `${item.percent}%` }}
+                    />
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+
+        <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+          <div className="p-6 border-b border-slate-100">
+            <h3 className="font-bold text-slate-900">Template Downloads</h3>
+            <p className="text-sm text-slate-500">Export mappings and definition files for a template.</p>
+          </div>
+          <div className="p-6 space-y-4">
+            <div>
+              <label className="text-xs uppercase tracking-wide text-slate-500">Template</label>
+              <select
+                value={selectedTemplateId ?? ''}
+                onChange={(e) => onSelectTemplate(e.target.value || null)}
+                className="mt-2 w-full border border-slate-200 rounded-lg px-3 py-2 text-sm"
+              >
+                {templates.map(template => (
+                  <option key={template.id} value={template.id}>
+                    {template.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <button
+                onClick={() => selectedTemplateId && onDownloadTemplateMappingJson(selectedTemplateId)}
+                disabled={!selectedTemplateId}
+                className="bg-slate-900 text-white rounded-lg py-2 px-4 hover:bg-slate-800 disabled:opacity-50"
+              >
+                Mapping JSON
+              </button>
+              <button
+                onClick={() => selectedTemplateId && onDownloadTemplateMappingCsv(selectedTemplateId)}
+                disabled={!selectedTemplateId}
+                className="bg-indigo-600 text-white rounded-lg py-2 px-4 hover:bg-indigo-700 disabled:opacity-50"
+              >
+                Mapping CSV
+              </button>
+              <button
+                onClick={() => selectedTemplateId && onDownloadTemplateDefinitionCsv(selectedTemplateId)}
+                disabled={!selectedTemplateId}
+                className="bg-emerald-600 text-white rounded-lg py-2 px-4 hover:bg-emerald-700 disabled:opacity-50"
+              >
+                Definition CSV
+              </button>
+            </div>
+            {selectedTemplate && (
+              <div className="text-xs text-slate-400">
+                Active template: {selectedTemplate.name} • {selectedTemplate.fields.length} fields
+              </div>
+            )}
+          </div>
+        </div>
       </div>
 
       <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden mb-6">

@@ -354,23 +354,74 @@ export default function App() {
 
   const exportTemplateMappings = () => {
     if (!snapshot || !activeTemplate) return;
-    const payload = {
+    const payload = buildTemplateMappingPayload(activeTemplate.id);
+    if (!payload) return;
+    downloadTextFile('template-mapping.json', JSON.stringify(payload, null, 2));
+  };
+
+  const csvEscape = (value: string) => `"${value.replace(/"/g, '""')}"`;
+
+  const buildTemplateMappingPayload = (templateId: string) => {
+    const template = templates.find(t => t.id === templateId);
+    if (!template) return null;
+    const mapping = mappingByTemplate[templateId] || {};
+
+    return {
       generatedAt: new Date().toISOString(),
       template: {
-        id: activeTemplate.id,
-        name: activeTemplate.name,
-        stakeholder: activeTemplate.stakeholder
+        id: template.id,
+        name: template.name,
+        stakeholder: template.stakeholder
       },
-      templateFields: templateFields.map(field => ({
+      templateFields: template.fields.map(field => ({
         name: field.name,
         description: field.description,
-        sourceField: mappingSelections[field.id],
-        confidence: suggestionMap[field.id]?.confidence ?? null,
-        rationale: suggestionMap[field.id]?.rationale ?? null,
-        operation: mappingOperations[field.id] || 'DIRECT'
+        required: field.required ?? true,
+        validationRule: field.validationRule ?? '',
+        sourceField: mapping[field.id]?.sourceFieldId ?? null,
+        confidence: mapping[field.id]?.confidence ?? null,
+        rationale: mapping[field.id]?.rationale ?? null,
+        operation: mapping[field.id]?.operation || 'DIRECT'
       }))
     };
-    downloadTextFile('template-mapping.json', JSON.stringify(payload, null, 2));
+  };
+
+  const downloadTemplateMappingJson = (templateId: string) => {
+    const payload = buildTemplateMappingPayload(templateId);
+    if (!payload) return;
+    downloadTextFile(`template-mapping-${payload.template.name}.json`, JSON.stringify(payload, null, 2));
+  };
+
+  const downloadTemplateMappingCsv = (templateId: string) => {
+    const payload = buildTemplateMappingPayload(templateId);
+    if (!payload) return;
+    const headers = ['Template Field', 'Description', 'Required', 'Validation Rule', 'Source Field', 'Operation', 'Confidence', 'Rationale'];
+    const rows = payload.templateFields.map(field => [
+      field.name,
+      field.description || '',
+      String(field.required),
+      field.validationRule || '',
+      field.sourceField || '',
+      field.operation || 'DIRECT',
+      field.confidence ?? '',
+      field.rationale || ''
+    ]);
+    const csv = [headers.map(csvEscape).join(','), ...rows.map(row => row.map(val => csvEscape(String(val))).join(','))].join('\n');
+    downloadTextFile(`template-mapping-${payload.template.name}.csv`, csv);
+  };
+
+  const downloadTemplateDefinitionCsv = (templateId: string) => {
+    const template = templates.find(t => t.id === templateId);
+    if (!template) return;
+    const headers = ['Field Name', 'Description', 'Required', 'Rule'];
+    const rows = template.fields.map(field => [
+      field.name,
+      field.description || '',
+      String(field.required ?? true),
+      field.validationRule || ''
+    ]);
+    const csv = [headers.map(csvEscape).join(','), ...rows.map(row => row.map(val => csvEscape(String(val))).join(','))].join('\n');
+    downloadTextFile(`template-definition-${template.name}.csv`, csv);
   };
 
   const downloadSnapshot = () => {
@@ -491,6 +542,13 @@ export default function App() {
     const mapping = mappingByTemplate[templateId] || {};
     return Object.values(mapping).filter(entry => entry?.sourceFieldId).length;
   };
+
+  const templateCoverage = templates.map(template => {
+    const mapped = mappedCountForTemplate(template.id);
+    const total = template.fields.length || 0;
+    const percent = total ? Math.round((mapped / total) * 100) : 0;
+    return { id: template.id, name: template.name, mapped, total, percent };
+  });
 
   const buildDataSourceEntry = (name: string, type: string, data: SchemaSnapshot): DataSource => {
     const tableCount = data.tables.length;
@@ -752,10 +810,16 @@ export default function App() {
                   templates={templates}
                   snapshot={snapshot}
                   totalMapped={totalMapped}
+                  templateCoverage={templateCoverage}
+                  activeTemplateId={activeTemplateId}
+                  onSelectTemplate={setActiveTemplateId}
                   onDownloadSnapshot={downloadSnapshot}
                   onDownloadTemplates={downloadTemplates}
                   onDownloadMappings={downloadMappings}
                   onDownloadJoinPlan={downloadJoinPlan}
+                  onDownloadTemplateMappingJson={downloadTemplateMappingJson}
+                  onDownloadTemplateMappingCsv={downloadTemplateMappingCsv}
+                  onDownloadTemplateDefinitionCsv={downloadTemplateDefinitionCsv}
                 />
               }
             />
