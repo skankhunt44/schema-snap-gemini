@@ -52,7 +52,8 @@ const buildTable = (name: string, rows: Record<string, any>[], source: string): 
     name,
     columns: profiles,
     rowCount: rows.length,
-    source
+    source,
+    sampleRows: rows.slice(0, 25)
   };
 };
 

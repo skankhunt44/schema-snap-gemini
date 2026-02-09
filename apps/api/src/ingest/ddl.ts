@@ -55,7 +55,8 @@ export const ingestDDL = (ddl: string, dialect: string): TableSchema[] => {
     tables.push({
       name: tableName,
       columns,
-      source: 'ddl'
+      source: 'ddl',
+      sampleRows: []
     });
   }
 

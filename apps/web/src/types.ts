@@ -11,6 +11,7 @@ export type TableSchema = {
   columns: ColumnProfile[];
   rowCount?: number;
   source?: string;
+  sampleRows?: Record<string, unknown>[];
 };
 
 export type Relationship = {

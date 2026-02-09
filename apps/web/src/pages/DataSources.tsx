@@ -7,7 +7,8 @@ import {
   Server,
   Code2,
   FileText,
-  UploadCloud
+  UploadCloud,
+  X
 } from 'lucide-react';
 import { DataSource, SchemaSnapshot, TableSchema } from '../types';
 import ConfirmDialog from '../components/ConfirmDialog';
@@ -47,6 +48,8 @@ const DataSources: React.FC<Props> = ({
   const [sqliteFile, setSqliteFile] = useState<File | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [dragActive, setDragActive] = useState(false);
+  const [previewSourceId, setPreviewSourceId] = useState<string | null>(null);
+  const [previewTable, setPreviewTable] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const sqliteInputRef = useRef<HTMLInputElement>(null);
@@ -171,6 +174,30 @@ const DataSources: React.FC<Props> = ({
       entry.missingColumns.length || entry.duplicateIdColumns.length || entry.lowVarianceColumns.length
   );
 
+  const previewSource = dataSources.find(source => source.id === previewSourceId) || null;
+  const previewTables = React.useMemo(() => {
+    if (!snapshot?.tables?.length) return [] as TableSchema[];
+    if (!previewSource?.fields?.length) return snapshot.tables;
+    const tableNames = new Set(previewSource.fields.map(field => field.table));
+    return snapshot.tables.filter(table => tableNames.has(table.name));
+  }, [snapshot, previewSource]);
+
+  React.useEffect(() => {
+    if (!previewSourceId) {
+      setPreviewTable(null);
+      return;
+    }
+    if (previewTables.length === 0) {
+      setPreviewTable(null);
+      return;
+    }
+    if (!previewTable || !previewTables.some(table => table.name === previewTable)) {
+      setPreviewTable(previewTables[0].name);
+    }
+  }, [previewSourceId, previewTables, previewTable]);
+
+  const selectedPreviewTable = previewTables.find(table => table.name === previewTable) || previewTables[0];
+
   return (
     <div className="p-6">
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
@@ -211,6 +238,14 @@ const DataSources: React.FC<Props> = ({
               <div className="flex items-center justify-between text-xs text-slate-400">
                 <span>Status: {source.status}</span>
                 <span>Last sync: {source.lastSync}</span>
+              </div>
+              <div className="mt-3">
+                <button
+                  onClick={() => setPreviewSourceId(source.id)}
+                  className="text-xs font-semibold text-indigo-600 hover:text-indigo-700"
+                >
+                  Preview data
+                </button>
               </div>
             </div>
           ))
@@ -293,6 +328,80 @@ const DataSources: React.FC<Props> = ({
           </div>
         )}
       </div>
+
+      {previewSourceId && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl overflow-hidden">
+            <div className="p-6 border-b border-slate-100 flex items-start justify-between gap-4">
+              <div>
+                <h3 className="text-lg font-bold text-slate-900">Data Preview</h3>
+                <p className="text-sm text-slate-500">
+                  {previewSource?.name || 'Selected source'} • showing up to 25 rows
+                </p>
+              </div>
+              <button
+                onClick={() => setPreviewSourceId(null)}
+                className="text-slate-400 hover:text-slate-600"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              {previewTables.length === 0 ? (
+                <div className="text-sm text-slate-500">No preview rows available for this source.</div>
+              ) : (
+                <>
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+                    <label className="text-xs uppercase tracking-wide text-slate-500">Table</label>
+                    <select
+                      value={selectedPreviewTable?.name || ''}
+                      onChange={(e) => setPreviewTable(e.target.value)}
+                      className="border border-slate-200 rounded-lg px-3 py-2 text-sm"
+                    >
+                      {previewTables.map(table => (
+                        <option key={table.name} value={table.name}>
+                          {table.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {!selectedPreviewTable?.sampleRows?.length ? (
+                    <div className="text-sm text-slate-500">No row samples captured for this table.</div>
+                  ) : (
+                    <div className="overflow-auto border border-slate-200 rounded-xl">
+                      <table className="min-w-full text-sm">
+                        <thead className="bg-slate-50 text-slate-500">
+                          <tr>
+                            {selectedPreviewTable.columns.map(col => (
+                              <th key={col.name} className="px-4 py-2 text-left font-medium">
+                                {col.name}
+                              </th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {selectedPreviewTable.sampleRows.map((row, rowIndex) => (
+                            <tr key={rowIndex} className="hover:bg-slate-50">
+                              {selectedPreviewTable.columns.map(col => (
+                                <td key={col.name} className="px-4 py-2 text-slate-600">
+                                  {row[col.name] !== undefined && row[col.name] !== null && String(row[col.name]).length
+                                    ? String(row[col.name])
+                                    : '—'}
+                                </td>
+                              ))}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {isModalOpen && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm">

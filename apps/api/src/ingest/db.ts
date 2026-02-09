@@ -5,6 +5,7 @@ import { TableSchema } from '../types/schema';
 import { inferColumnProfile } from '../utils/profile';
 
 const SAMPLE_LIMIT = 100;
+const PREVIEW_LIMIT = 25;
 
 const mapType = (sqlType: string) => {
   const t = sqlType.toLowerCase();
@@ -42,7 +43,12 @@ export const ingestPostgres = async (connectionString: string): Promise<TableSch
       return inferColumnProfile(col, values);
     });
 
-    results.push({ name: tableName, columns: profiles, source: 'db' });
+    results.push({
+      name: tableName,
+      columns: profiles,
+      source: 'db',
+      sampleRows: rows.slice(0, PREVIEW_LIMIT)
+    });
   }
 
   await client.end();
@@ -72,7 +78,12 @@ export const ingestMySQL = async (connectionString: string): Promise<TableSchema
       const values = sampleRows.map(r => r[col]);
       return inferColumnProfile(col, values);
     });
-    results.push({ name: tableName, columns: profiles, source: 'db' });
+    results.push({
+      name: tableName,
+      columns: profiles,
+      source: 'db',
+      sampleRows: sampleRows.slice(0, PREVIEW_LIMIT)
+    });
   }
 
   await conn.end();
@@ -96,7 +107,12 @@ export const ingestSQLite = async (filePath: string): Promise<TableSchema[]> => 
       return inferColumnProfile(col.name, values);
     });
 
-    results.push({ name: tableName, columns: profiles, source: 'db' });
+    results.push({
+      name: tableName,
+      columns: profiles,
+      source: 'db',
+      sampleRows: sampleRows.slice(0, PREVIEW_LIMIT)
+    });
   }
 
   db.close();

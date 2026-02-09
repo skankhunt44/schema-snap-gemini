@@ -13,6 +13,7 @@ export type TableSchema = {
   columns: ColumnProfile[];
   rowCount?: number;
   source?: string; // csv|ddl|db
+  sampleRows?: Record<string, unknown>[];
 };
 
 export type Relationship = {

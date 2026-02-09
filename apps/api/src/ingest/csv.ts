@@ -4,6 +4,7 @@ import { inferColumnProfile } from '../utils/profile';
 import { DataType, TableSchema } from '../types/schema';
 
 const SAMPLE_LIMIT = 200;
+const PREVIEW_LIMIT = 25;
 
 const stripExt = (name: string) => name.replace(/\.(csv|xlsx|xls)$/i, '');
 const isMissing = (value: unknown) => value === null || value === undefined || String(value).trim() === '';
@@ -66,7 +67,8 @@ const buildTable = (name: string, rows: Record<string, unknown>[], source: strin
     name,
     columns: profiles,
     rowCount: rows.length,
-    source
+    source,
+    sampleRows: rows.slice(0, PREVIEW_LIMIT)
   };
 };
 
