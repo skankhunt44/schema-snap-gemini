@@ -1,7 +1,7 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { ingestCsv, ingestDDL, ingestDB, ingestSQLite, getState, loadSampleSnapshot, saveState, suggestMappings } from './lib/api';
-import { DataSource, MappingEntry, Relationship, SchemaSnapshot, Template, TemplateField, SourceField, TableSchema } from './types';
+import { DataSource, MappingEntry, Relationship, ReportEntry, SchemaSnapshot, Template, TemplateField, SourceField, TableSchema } from './types';
 import Sidebar from './components/Sidebar';
 import Dashboard from './pages/Dashboard';
 import DataSources from './pages/DataSources';
@@ -18,6 +18,7 @@ export default function App() {
   const [templates, setTemplates] = React.useState<Template[]>([]);
   const [activeTemplateId, setActiveTemplateId] = React.useState<string | null>(null);
   const [mappingByTemplate, setMappingByTemplate] = React.useState<Record<string, Record<string, MappingEntry>>>({});
+  const [reports, setReports] = React.useState<ReportEntry[]>([]);
 
   const [error, setError] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(false);
@@ -474,6 +475,7 @@ export default function App() {
     setTemplates([sampleTemplate]);
     setActiveTemplateId(sampleTemplate.id);
     setMappingByTemplate({});
+    setReports([]);
   };
 
   const requestNotifications = async () => {
@@ -509,6 +511,39 @@ export default function App() {
     const percent = total ? Math.round((mapped / total) * 100) : 0;
     return { id: template.id, name: template.name, mapped, total, percent };
   });
+
+  const validationIssues = templates.filter(template =>
+    template.fields.some(field => (field.required ?? true) && !mappingByTemplate[template.id]?.[field.id]?.sourceFieldId)
+  ).length;
+
+  const createReportEntry = (templateId: string) => {
+    const template = templates.find(t => t.id === templateId);
+    if (!template) return null;
+    const report: ReportEntry = {
+      id: `rep_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      templateId: template.id,
+      templateName: template.name,
+      stakeholder: template.stakeholder,
+      dateGenerated: new Date().toLocaleDateString(),
+      status: 'Draft'
+    };
+    setReports(prev => [report, ...prev]);
+    return report;
+  };
+
+  const publishReport = (reportId: string) => {
+    setReports(prev =>
+      prev.map(report => (report.id === reportId ? { ...report, status: 'Published' } : report))
+    );
+  };
+
+  const generateAndDownload = (templateId: string) => {
+    const mappingCount = mappedCountForTemplate(templateId);
+    if (!mappingCount) return;
+    createReportEntry(templateId);
+    const url = `/api/output?format=xlsx&templateId=${encodeURIComponent(templateId)}`;
+    window.location.href = url;
+  };
 
   const buildDataSourceEntry = (name: string, type: string, data: SchemaSnapshot): DataSource => {
     const tableCount = data.tables.length;
@@ -558,12 +593,13 @@ export default function App() {
         dataSources,
         templates,
         activeTemplateId,
-        mappingByTemplate
+        mappingByTemplate,
+        reports
       }).catch(() => undefined);
     }, 500);
 
     return () => clearTimeout(timer);
-  }, [hydrated, snapshot, dataSources, templates, activeTemplateId, mappingByTemplate]);
+  }, [hydrated, snapshot, dataSources, templates, activeTemplateId, mappingByTemplate, reports]);
 
   React.useEffect(() => {
     if (!('Notification' in window)) return;
@@ -621,6 +657,7 @@ export default function App() {
           setDataSources(patchedSources);
           setTemplates(state.templates || []);
           setActiveTemplateId(state.activeTemplateId || null);
+          setReports(state.reports || []);
           const normalized: Record<string, Record<string, MappingEntry>> = {};
           Object.entries(state.mappingByTemplate || {}).forEach(([tplId, mapping]) => {
             const record: Record<string, MappingEntry> = {};
@@ -657,13 +694,14 @@ export default function App() {
               path="/"
               element={
                 <Dashboard
-                  snapshot={snapshot}
                   templates={templates}
                   dataSources={dataSources}
-                  mappedCount={mappedCount}
-                  totalMapped={totalMapped}
                   templateCoverage={templateCoverage}
+                  reports={reports}
+                  validationIssues={validationIssues}
                   onLoadSample={loadSampleData}
+                  onGenerateReport={generateAndDownload}
+                  onPublishReport={publishReport}
                 />
               }
             />

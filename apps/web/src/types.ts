@@ -61,6 +61,17 @@ export type MappingEntry = {
   transformation?: string;
 };
 
+export type ReportStatus = 'Draft' | 'Published';
+
+export type ReportEntry = {
+  id: string;
+  templateId: string;
+  templateName: string;
+  stakeholder: string;
+  dateGenerated: string;
+  status: ReportStatus;
+};
+
 export type SourceField = {
   id: string;
   table: string;
@@ -87,4 +98,5 @@ export type PersistedState = {
   templates: Template[];
   activeTemplateId: string | null;
   mappingByTemplate: Record<string, Record<string, MappingEntry>>;
+  reports: ReportEntry[];
 };
