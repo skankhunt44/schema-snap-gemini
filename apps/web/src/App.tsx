@@ -204,7 +204,15 @@ export default function App() {
   const isMissing = (value: unknown) => value === null || value === undefined || String(value).trim() === '';
   const normalizeToken = (value: string) => value.toLowerCase().replace(/[^a-z0-9]/g, '');
   const singularize = (value: string) => (value.endsWith('s') ? value.slice(0, -1) : value);
-  const tableBase = (name: string) => singularize(normalizeToken(name.split('_').slice(-1)[0] || name));
+  const DIRTY_SUFFIXES = new Set(['dirty', 'raw', 'staging', 'tmp', 'temp', 'sample']);
+  const tableBase = (name: string) => {
+    const tokens = name.split('_');
+    let baseToken = tokens[tokens.length - 1] || name;
+    if (tokens.length > 1 && DIRTY_SUFFIXES.has(baseToken.toLowerCase())) {
+      baseToken = tokens[tokens.length - 2] || baseToken;
+    }
+    return singularize(normalizeToken(baseToken));
+  };
   const isPrimaryKeyColumn = (tableName: string, columnName: string) => {
     const col = normalizeToken(columnName);
     const base = tableBase(tableName);
@@ -233,6 +241,20 @@ export default function App() {
     return best;
   };
 
+  const quantile = (values: number[], q: number) => {
+    if (!values.length) return 0;
+    const sorted = [...values].sort((a, b) => a - b);
+    const pos = (sorted.length - 1) * q;
+    const base = Math.floor(pos);
+    const rest = pos - base;
+    if (sorted[base + 1] !== undefined) {
+      return sorted[base] + rest * (sorted[base + 1] - sorted[base]);
+    }
+    return sorted[base];
+  };
+
+  const looksLikeAmount = (name: string) => /amount|total|value|cost|fee|budget|revenue|price/i.test(name);
+
   const computeColumnStats = (name: string, dataType: string, rows: Record<string, unknown>[]) => {
     const values = rows.map(row => row[name]);
     const cleaned = values.map(value => (value === null || value === undefined ? '' : String(value).trim())).filter(Boolean);
@@ -251,15 +273,31 @@ export default function App() {
     if (!table.sampleRows?.length) return table;
     const rows = table.sampleRows;
     const fillValues: Record<string, string | number> = {};
+    const numericBounds: Record<string, { median: number; lower: number; upper: number; clampNegative: boolean }> = {};
+    const dateFillValues: Record<string, string> = {};
 
     table.columns.forEach(column => {
       const values = rows.map(row => row[column.name]).filter(value => !isMissing(value));
       if (column.dataType === 'number' || column.dataType === 'currency') {
         const numeric = values.map(value => Number(value)).filter(value => !Number.isNaN(value));
-        fillValues[column.name] = median(numeric);
+        const med = median(numeric);
+        fillValues[column.name] = med;
+        if (numeric.length >= 4) {
+          const q1 = quantile(numeric, 0.25);
+          const q3 = quantile(numeric, 0.75);
+          const iqr = q3 - q1;
+          numericBounds[column.name] = {
+            median: med,
+            lower: iqr ? q1 - 1.5 * iqr : Number.NEGATIVE_INFINITY,
+            upper: iqr ? q3 + 1.5 * iqr : Number.POSITIVE_INFINITY,
+            clampNegative: looksLikeAmount(column.name)
+          };
+        }
       } else if (column.dataType === 'date') {
         const valid = values.map(value => String(value)).filter(value => !Number.isNaN(new Date(value).valueOf()));
-        fillValues[column.name] = mode(valid);
+        const fill = mode(valid);
+        fillValues[column.name] = fill;
+        dateFillValues[column.name] = fill;
       } else if (column.dataType === 'boolean') {
         const normalized = values.map(value => String(value).toLowerCase());
         fillValues[column.name] = mode(normalized);
@@ -272,6 +310,7 @@ export default function App() {
       .filter(column => isPrimaryKeyColumn(table.name, column.name))
       .map(column => column.name);
     const seen = new Set<string>();
+    const today = new Date();
 
     const cleanedRows = rows.reduce<Record<string, unknown>[]>((acc, row) => {
       const next: Record<string, unknown> = { ...row };
@@ -284,13 +323,28 @@ export default function App() {
 
         if (column.dataType === 'number' || column.dataType === 'currency') {
           const num = Number(value);
-          next[column.name] = Number.isNaN(num) ? fillValues[column.name] : num;
+          if (Number.isNaN(num)) {
+            next[column.name] = fillValues[column.name];
+            return;
+          }
+          const bounds = numericBounds[column.name];
+          if (bounds) {
+            if ((bounds.clampNegative && num < 0) || num < bounds.lower || num > bounds.upper) {
+              next[column.name] = bounds.median;
+              return;
+            }
+          }
+          next[column.name] = num;
           return;
         }
 
         if (column.dataType === 'date') {
           const dateVal = new Date(String(value));
-          next[column.name] = Number.isNaN(dateVal.valueOf()) ? fillValues[column.name] : value;
+          if (Number.isNaN(dateVal.valueOf()) || dateVal > today) {
+            next[column.name] = dateFillValues[column.name] || fillValues[column.name];
+          } else {
+            next[column.name] = value;
+          }
         }
       });
 

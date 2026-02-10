@@ -10,7 +10,15 @@ const stripExt = (name: string) => name.replace(/\.(csv|xlsx|xls)$/i, '');
 const isMissing = (value: unknown) => value === null || value === undefined || String(value).trim() === '';
 const normalizeToken = (value: string) => value.toLowerCase().replace(/[^a-z0-9]/g, '');
 const singularize = (value: string) => (value.endsWith('s') ? value.slice(0, -1) : value);
-const tableBase = (name: string) => singularize(normalizeToken(name.split('_').slice(-1)[0] || name));
+const DIRTY_SUFFIXES = new Set(['dirty', 'raw', 'staging', 'tmp', 'temp', 'sample']);
+const tableBase = (name: string) => {
+  const tokens = name.split('_');
+  let baseToken = tokens[tokens.length - 1] || name;
+  if (tokens.length > 1 && DIRTY_SUFFIXES.has(baseToken.toLowerCase())) {
+    baseToken = tokens[tokens.length - 2] || baseToken;
+  }
+  return singularize(normalizeToken(baseToken));
+};
 const isPrimaryKeyColumn = (tableName: string, columnName: string) => {
   const col = normalizeToken(columnName);
   const base = tableBase(tableName);
@@ -63,6 +71,20 @@ const mode = (values: string[]) => {
   return best;
 };
 
+const quantile = (values: number[], q: number) => {
+  if (!values.length) return 0;
+  const sorted = [...values].sort((a, b) => a - b);
+  const pos = (sorted.length - 1) * q;
+  const base = Math.floor(pos);
+  const rest = pos - base;
+  if (sorted[base + 1] !== undefined) {
+    return sorted[base] + rest * (sorted[base + 1] - sorted[base]);
+  }
+  return sorted[base];
+};
+
+const looksLikeAmount = (name: string) => /amount|total|value|cost|fee|budget|revenue|price/i.test(name);
+
 const buildTable = (name: string, rows: Record<string, unknown>[], source: string): TableSchema => {
   const columns = Object.keys(rows[0] || {});
   const profiles = columns.map(col => {
@@ -88,14 +110,31 @@ const applyAutoFix = (rows: Record<string, unknown>[], tableName: string) => {
   });
 
   const fillValues: Record<string, string | number> = {};
+  const numericBounds: Record<string, { median: number; lower: number; upper: number; clampNegative: boolean }> = {};
+  const dateFillValues: Record<string, string> = {};
+
   profiles.forEach(profile => {
     const values = rows.map(r => r[profile.name]).filter(v => !isMissing(v));
     if (profile.dataType === 'number' || profile.dataType === 'currency') {
       const nums = values.map(v => Number(v)).filter(v => !Number.isNaN(v));
-      fillValues[profile.name] = median(nums);
+      const med = median(nums);
+      fillValues[profile.name] = med;
+      if (nums.length >= 4) {
+        const q1 = quantile(nums, 0.25);
+        const q3 = quantile(nums, 0.75);
+        const iqr = q3 - q1;
+        numericBounds[profile.name] = {
+          median: med,
+          lower: iqr ? q1 - 1.5 * iqr : Number.NEGATIVE_INFINITY,
+          upper: iqr ? q3 + 1.5 * iqr : Number.POSITIVE_INFINITY,
+          clampNegative: looksLikeAmount(profile.name)
+        };
+      }
     } else if (profile.dataType === 'date') {
       const valid = values.map(v => String(v)).filter(v => !Number.isNaN(new Date(v).valueOf()));
-      fillValues[profile.name] = mode(valid);
+      const fill = mode(valid);
+      fillValues[profile.name] = fill;
+      dateFillValues[profile.name] = fill;
     } else if (profile.dataType === 'boolean') {
       const normalized = values.map(v => String(v).toLowerCase());
       fillValues[profile.name] = mode(normalized);
@@ -108,6 +147,7 @@ const applyAutoFix = (rows: Record<string, unknown>[], tableName: string) => {
     .filter(p => isPrimaryKeyColumn(tableName, p.name))
     .map(p => p.name);
   const seen = new Set<string>();
+  const today = new Date();
 
   const cleaned = rows.reduce<Record<string, unknown>[]>((acc, row) => {
     const next: Record<string, unknown> = { ...row };
@@ -121,13 +161,28 @@ const applyAutoFix = (rows: Record<string, unknown>[], tableName: string) => {
 
       if (profile.dataType === 'number' || profile.dataType === 'currency') {
         const num = Number(value);
-        next[profile.name] = Number.isNaN(num) ? fillValues[profile.name] : num;
+        if (Number.isNaN(num)) {
+          next[profile.name] = fillValues[profile.name];
+          return;
+        }
+        const bounds = numericBounds[profile.name];
+        if (bounds) {
+          if ((bounds.clampNegative && num < 0) || num < bounds.lower || num > bounds.upper) {
+            next[profile.name] = bounds.median;
+            return;
+          }
+        }
+        next[profile.name] = num;
         return;
       }
 
       if (profile.dataType === 'date') {
         const dateVal = new Date(String(value));
-        next[profile.name] = Number.isNaN(dateVal.valueOf()) ? fillValues[profile.name] : value;
+        if (Number.isNaN(dateVal.valueOf()) || dateVal > today) {
+          next[profile.name] = dateFillValues[profile.name] || fillValues[profile.name];
+        } else {
+          next[profile.name] = value;
+        }
       }
     });
 
