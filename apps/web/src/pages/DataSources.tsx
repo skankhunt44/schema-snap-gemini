@@ -323,7 +323,7 @@ const DataSources: React.FC<Props> = ({
                     <p className="text-xs text-slate-500">{table.columns.length} columns • {table.rowCount ?? '—'} rows sampled</p>
                   </div>
                   <div className="flex flex-wrap items-center gap-3">
-                    <span className="text-xs text-slate-400">Fix uses sampled rows only.</span>
+                    <span className="text-xs text-slate-400">Fix re-ingests stored files when available.</span>
                     <button
                       onClick={() => handleAiFixSuggestions(table.name)}
                       className="px-3 py-2 text-xs bg-slate-900 text-white rounded-lg hover:bg-slate-800 disabled:opacity-50"
@@ -493,6 +493,9 @@ const DataSources: React.FC<Props> = ({
             <div className="p-6 border-b border-slate-100">
               <h3 className="text-lg font-bold text-slate-900">Add Data Source</h3>
               <p className="text-sm text-slate-500">Choose a source type and connect your data.</p>
+              <p className="text-xs text-amber-600 mt-2">
+                Demo only. Data uploaded here is visible in this demo environment and may be cleared at any time. Do not upload sensitive or personal data.
+              </p>
             </div>
 
             <div className="p-6 space-y-4">

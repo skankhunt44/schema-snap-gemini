@@ -1370,6 +1370,11 @@ export default function App() {
       <div className="flex min-h-screen bg-slate-50">
         <Sidebar />
         <main className="flex-1 md:ml-64 transition-all duration-300">
+          <div className="sticky top-0 z-40 bg-amber-50 border-b border-amber-200 text-amber-900">
+            <div className="max-w-6xl mx-auto px-6 py-2 text-xs sm:text-sm">
+              Demo only. Data uploaded here is visible in this demo environment and may be cleared at any time. Do not upload sensitive or personal data.
+            </div>
+          </div>
           <Routes>
             <Route
               path="/"
