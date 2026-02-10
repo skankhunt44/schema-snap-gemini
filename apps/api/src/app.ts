@@ -1,6 +1,8 @@
 import express from 'express';
 import cors from 'cors';
 import multer from 'multer';
+import fs from 'fs/promises';
+import path from 'path';
 
 import { ingestCsvBuffer, ingestCsvBufferAutoFix } from './ingest/csv';
 import { ingestDDL } from './ingest/ddl';
@@ -12,6 +14,9 @@ import { loadSampleTables } from './samples';
 import { readState, writeState } from './store';
 import { buildCombinedOutput, buildCombinedWorkbook } from './output';
 import { SchemaSnapshot, TableSchema } from './types/schema';
+
+const dataDir = process.env.DATA_DIR || path.join(process.cwd(), 'data');
+const uploadsDir = path.join(dataDir, 'uploads');
 
 export const createApp = () => {
   const app = express();
@@ -74,8 +79,22 @@ export const createApp = () => {
       if (!files?.length) return res.status(400).json({ error: 'No CSV files uploaded.' });
 
       const autoFix = String(req.query.autoFix || '').toLowerCase() === 'true';
-      const tables: TableSchema[] = files.map(file =>
-        autoFix ? ingestCsvBufferAutoFix(file.buffer, file.originalname) : ingestCsvBuffer(file.buffer, file.originalname)
+      await fs.mkdir(uploadsDir, { recursive: true });
+
+      const tables: TableSchema[] = await Promise.all(
+        files.map(async file => {
+          const safeName = file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_');
+          const fileId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}-${safeName}`;
+          const filePath = path.join(uploadsDir, fileId);
+          await fs.writeFile(filePath, file.buffer);
+
+          const table = autoFix
+            ? ingestCsvBufferAutoFix(file.buffer, file.originalname)
+            : ingestCsvBuffer(file.buffer, file.originalname);
+          table.fileId = fileId;
+          table.fileName = file.originalname;
+          return table;
+        })
       );
       const relationships = await inferRelationships(tables, process.env.GEMINI_API_KEY);
 
@@ -83,6 +102,28 @@ export const createApp = () => {
       res.json({ ...snapshot, autoFixApplied: autoFix });
     } catch (err: any) {
       res.status(500).json({ error: err.message || 'CSV ingest failed' });
+    }
+  });
+
+  app.post('/api/ingest/csv/fix', async (req, res) => {
+    try {
+      const { fileId, fileName } = req.body || {};
+      if (!fileId || !fileName) return res.status(400).json({ error: 'fileId and fileName are required' });
+
+      const filePath = path.join(uploadsDir, fileId);
+      const buffer = await fs.readFile(filePath);
+      const table = ingestCsvBufferAutoFix(buffer, fileName);
+      table.fileId = fileId;
+      table.fileName = fileName;
+
+      const relationships = await inferRelationships([table], process.env.GEMINI_API_KEY);
+      const snapshot: SchemaSnapshot = { tables: [table], relationships };
+      res.json(snapshot);
+    } catch (err: any) {
+      if (err.code === 'ENOENT') {
+        return res.status(404).json({ error: 'Stored file not found. Re-upload the source to fix.' });
+      }
+      res.status(500).json({ error: err.message || 'CSV fix failed' });
     }
   });
 

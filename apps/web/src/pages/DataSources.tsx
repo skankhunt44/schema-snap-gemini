@@ -24,7 +24,7 @@ type Props = {
   onDbIngest: (name: string, dbType: string, connectionString: string) => Promise<boolean> | boolean;
   onSQLiteIngest: (name: string, file: File) => Promise<boolean> | boolean;
   onRemoveSource: (id: string) => void;
-  onApplyFix: (tableName: string) => void;
+  onApplyFix: (tableName: string) => Promise<boolean> | boolean;
 };
 
 const DataSources: React.FC<Props> = ({
@@ -54,6 +54,7 @@ const DataSources: React.FC<Props> = ({
   const [previewSourceId, setPreviewSourceId] = useState<string | null>(null);
   const [previewTable, setPreviewTable] = useState<string | null>(null);
   const [fixLoading, setFixLoading] = useState<string | null>(null);
+  const [fixingTable, setFixingTable] = useState<string | null>(null);
   const [fixError, setFixError] = useState<string | null>(null);
   const [fixSuggestions, setFixSuggestions] = useState<
     Record<string, { summary: string; suggestions: Array<{ issue: string; fix: string; rationale?: string }> }>
@@ -116,6 +117,21 @@ const DataSources: React.FC<Props> = ({
       setFixError(err.message || 'Failed to fetch AI fixes');
     } finally {
       setFixLoading(null);
+    }
+  };
+
+  const handleFixNow = async (tableName: string) => {
+    setFixingTable(tableName);
+    setFixError(null);
+    try {
+      const ok = await onApplyFix(tableName);
+      if (!ok) {
+        setFixError('Fix unavailable for this source. Re-upload the file to enable full fixes.');
+      }
+    } catch (err: any) {
+      setFixError(err.message || 'Failed to apply fixes');
+    } finally {
+      setFixingTable(null);
     }
   };
 
@@ -316,11 +332,11 @@ const DataSources: React.FC<Props> = ({
                       {fixLoading === table.name ? 'Gemini…' : 'Ask Gemini'}
                     </button>
                     <button
-                      onClick={() => onApplyFix(table.name)}
+                      onClick={() => handleFixNow(table.name)}
                       className="px-3 py-2 text-xs bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50"
-                      disabled={!table.sampleRows?.length}
+                      disabled={fixingTable === table.name || (!table.sampleRows?.length && !table.fileId)}
                     >
-                      Fix Now
+                      {fixingTable === table.name ? 'Fixing…' : 'Fix Now'}
                     </button>
                   </div>
                 </div>

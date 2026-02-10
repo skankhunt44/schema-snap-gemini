@@ -14,6 +14,8 @@ export type TableSchema = {
   rowCount?: number;
   source?: string; // csv|ddl|db
   sampleRows?: Record<string, unknown>[];
+  fileId?: string;
+  fileName?: string;
 };
 
 export type Relationship = {

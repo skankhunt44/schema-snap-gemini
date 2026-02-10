@@ -12,6 +12,8 @@ export type TableSchema = {
   rowCount?: number;
   source?: string;
   sampleRows?: Record<string, unknown>[];
+  fileId?: string;
+  fileName?: string;
 };
 
 export type Relationship = {

@@ -1,6 +1,6 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { ingestCsv, ingestDDL, ingestDB, ingestSQLite, getState, loadSampleSnapshot, saveState, suggestMappings, explainSchema, generateTemplate, suggestFixes, generateReportNarrative } from './lib/api';
+import { ingestCsv, ingestDDL, ingestDB, ingestSQLite, getState, loadSampleSnapshot, saveState, suggestMappings, explainSchema, generateTemplate, suggestFixes, generateReportNarrative, fixCsvSource } from './lib/api';
 import { DataSource, GeminiArtifacts, MappingEntry, Relationship, ReportEntry, SchemaSnapshot, Template, TemplateField, SourceField, TableSchema } from './types';
 import Sidebar from './components/Sidebar';
 import Dashboard from './pages/Dashboard';
@@ -319,13 +319,38 @@ export default function App() {
     };
   };
 
-  const applyAutoFixToSnapshot = (tableName: string) => {
-    if (!snapshot) return;
-    const tables = snapshot.tables.map(table => {
-      if (table.name !== tableName) return table;
-      return applyAutoFixToTable(table);
+  const applyAutoFixToSnapshot = async (tableName: string) => {
+    if (!snapshot) return false;
+    const table = snapshot.tables.find(item => item.name === tableName);
+    if (!table) return false;
+
+    if (table.fileId && table.fileName) {
+      const fixed = await fixCsvSource(table.fileId, table.fileName);
+      setSnapshot(prev => mergeSnapshots(prev, fixed));
+      const updatedTable = fixed.tables.find(item => item.name === tableName);
+      if (updatedTable) {
+        setDataSources(prev =>
+          prev.map(source => {
+            if (!source.fields?.some(field => field.table === tableName)) return source;
+            const remaining = source.fields?.filter(field => field.table !== tableName) || [];
+            const refreshed = buildSourceFields({ tables: [updatedTable], relationships: [] }, source.id, source.name);
+            return {
+              ...source,
+              fields: [...remaining, ...refreshed],
+              lastSync: new Date().toLocaleString()
+            };
+          })
+        );
+      }
+      return true;
+    }
+
+    const tables = snapshot.tables.map(item => {
+      if (item.name !== tableName) return item;
+      return applyAutoFixToTable(item);
     });
     setSnapshot({ ...snapshot, tables });
+    return true;
   };
 
   const buildSourceFields = (data: SchemaSnapshot, sourceId?: string, sourceName?: string): SourceField[] => {

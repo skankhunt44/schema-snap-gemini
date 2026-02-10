@@ -41,6 +41,16 @@ export const ingestSQLite = async (file: File): Promise<SchemaSnapshot> => {
   return res.json();
 };
 
+export const fixCsvSource = async (fileId: string, fileName: string): Promise<SchemaSnapshot> => {
+  const res = await fetch('/api/ingest/csv/fix', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ fileId, fileName })
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+};
+
 export const suggestMappings = async (sourceFields: SourceField[], templateFields: TemplateField[]) => {
   const res = await fetch('/api/mappings/suggest', {
     method: 'POST',
